@@ -1,0 +1,28 @@
+{
+  "name": "custom-resources",
+  "description": "Custom Resources to support Cognito User Profiles Export Reference Architecture",
+  "author": {
+    "name": "aws-solutions-builder"
+  },
+  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "axios": "~0.19.2",
+    "uuid": "^8.1.0"
+  },
+  "devDependencies": {
+    "aws-sdk": "*",
+    "jest": "*",
+    "axios-mock-adapter": "*"
+  },
+  "scripts": {
+    "pretest": "npm ci",
+    "clean": "rm -rf dist/ node_modules/ coverage/",
+    "test": "jest test/*.spec.js --coverage --silent",
+    "package:zip": "cd dist && zip -rq package.zip .",
+    "package:dist": "mkdir dist && rsync -avr ../utils ./dist/ && rsync -avr --exclude=*test* --exclude=*dist* --exclude=*node_modules* ./ ./dist/$npm_package_name && rsync -avr ./node_modules ./dist/$npm_package_name",
+    "package": "npm run clean && npm ci --production && npm run package:dist && npm run package:zip",
+    "build": "npm run clean && rm -rf package-lock.json && npm install"
+  }
+}

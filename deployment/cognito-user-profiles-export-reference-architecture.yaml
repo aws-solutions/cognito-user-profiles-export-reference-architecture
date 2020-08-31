@@ -1,0 +1,895 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Cognito User Profiles Export Reference Architecture
+#
+# template for cognito-user-profiles-export-reference-architecture
+# **DO NOT DELETE**
+#
+# author: aws-solutions-builder@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: (SO0126) - Cognito User Profiles Export Reference Architecture. Version VERSION_PLACEHOLDER
+
+Parameters:
+  PrimaryUserPoolId:
+    Type: String
+    AllowedPattern: ^[\w-]+_[0-9a-zA-Z]+$
+  SecondaryRegion:
+    Type: String
+    AllowedPattern: ^[\w-]+$
+  ExportFrequency:
+    Type: String
+    Default: "EVERY_DAY"
+    AllowedValues: ["EVERY_DAY", "EVERY_7_DAYS", "EVERY_30_DAYS"]
+  CognitoTPS:
+    Type: String
+    Default: "10"
+    AllowedValues: ["1", "5", "10"]
+  NotificationEmail:
+    Type: String
+    AllowedPattern: "^[_A-Za-z0-9-\\+]+(\\.[_A-Za-z0-9-]+)*@[A-Za-z0-9-]+(\\.[A-Za-z0-9]+)*(\\.[A-Za-z]{2,})$"
+  SnsPreference:
+    Type: String
+    Default: "INFO_AND_ERRORS"
+    AllowedValues: ["INFO_AND_ERRORS", "ERRORS_ONLY"]
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: User Pool Configuration
+        Parameters:
+          - PrimaryUserPoolId
+          - SecondaryRegion
+      - Label:
+          default: Backup Process Configuration
+        Parameters:
+          - ExportFrequency
+          - CognitoTPS
+          - NotificationEmail
+          - SnsPreference
+    ParameterLabels:
+      PrimaryUserPoolId:
+        default: "PrimaryUserPoolId: The ID of the Cognito User Pool that will be backed up (Required)"
+      SecondaryRegion:
+        default: "SecondaryRegion: The region in which the Secondary User Pool was created (Required)"
+      ExportFrequency:
+        default: "ExportFrequency: The frequency at which the ExportWorkflow will run (Required)"
+      CognitoTPS:
+        default: "CognitoTPS: The amount of times a Cognito API will be called per second (Required)"
+      NotificationEmail:
+        default: "NotificationEmail: Email address for SNS notifications. Subscribed users will receive receive notifications if an issue is detected (Required)"
+      SnsPreference:
+        default: "SnsPreference: INFO_AND_ERRORS - The solution will publish a message to the SNS topic each time a workflow completes and if there are errors detected. ERRORS_ONLY - The solution will only publish messages if an error is detected (Required)"
+
+Mappings:
+  MetricsMap:
+    Send-Data:
+      SendAnonymousData: "Yes" # change to 'No' to disable the collection of anonymous Operational Metrics for this solution
+
+  SourceCode:
+    General:
+      S3Bucket: BUCKET_NAME_PLACEHOLDER
+      KeyPrefix: SOLUTION_NAME_PLACEHOLDER/VERSION_PLACEHOLDER
+
+Resources:
+  BackupTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: type
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+        - AttributeName: type
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: True
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+
+  GlobalTableCreator:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Secondary user pool table creator
+      Code:
+        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+      Handler: "custom-resources/global-table-creator.handler"
+      Role: !GetAtt GlobalTableCreatorRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 120
+      MemorySize: 128
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+
+  GlobalTableCreatorRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: dynamodb:DescribeLimits cannot have specific resources but requires "*".
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+        - PolicyName: DynamoDBPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:CreateTable
+                  - dynamodb:CreateTableReplica
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                  - dynamodb:UpdateItem
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:UpdateTable
+                  - dynamodb:DescribeTable
+                Resource:
+                  - !GetAtt BackupTable.Arn
+                  - !Sub arn:${AWS::Partition}:dynamodb:${SecondaryRegion}:${AWS::AccountId}:table/${BackupTable}
+              - Effect: Allow
+                Action: dynamodb:DescribeLimits
+                Resource: "*"
+              - Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource:
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/replication.dynamodb.amazonaws.com/AWSServiceRoleForDynamoDBReplication
+        - PolicyName: StepFunctionsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource:
+                  - !Ref SecondaryUserPoolTableStepFunctions
+
+  GlobalTableChecker:
+    Type: AWS::Lambda::Function
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      Description: Secondary user pool table readiness checker
+      Code:
+        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+      Handler: "custom-resources/global-table-checker.handler"
+      Role: !GetAtt GlobalTableCheckerRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 300
+      MemorySize: 128
+      Environment:
+        Variables:
+          USER_POOL_TABLE: !Ref BackupTable
+          SECONDARY_REGION: !Ref SecondaryRegion
+
+  GlobalTableCheckerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+        - PolicyName: DynamoDBPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeTable
+                Resource:
+                  - !Sub arn:${AWS::Partition}:dynamodb:${SecondaryRegion}:${AWS::AccountId}:table/${BackupTable}
+
+  SecondaryUserPoolTable:
+    Type: Custom::CreateTable
+    Properties:
+      ServiceToken: !GetAtt GlobalTableCreator.Arn
+      UserPoolTable: !Ref BackupTable
+      SecondaryRegion: !Ref SecondaryRegion
+      StateMachineArn: !Ref SecondaryUserPoolTableStepFunctions
+
+  SecondaryUserPoolTableStepFunctionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - states.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /service-role/
+      Policies:
+        - PolicyName: StepFunctionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !GetAtt GlobalTableChecker.Arn
+
+  SecondaryUserPoolTableStepFunctions:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      RoleArn: !GetAtt SecondaryUserPoolTableStepFunctionsRole.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "SOLUTION_NAME_PLACEHOLDER VERSION_PLACEHOLDER: Checks if secondary DynamoDB global table is ready or not",
+          "StartAt": "GlobalTableChecker",
+          "States": {
+            "GlobalTableChecker": {
+              "Type": "Task",
+              "Resource": "${GlobalTableChecker.Arn}",
+              "InputPath": "$",
+              "OutputPath": "$",
+              "Next": "Has Stream ARN?"
+            },
+            "Has Stream ARN?": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Not": {
+                    "Variable": "$.LatestStreamArn",
+                    "StringEquals": ""
+                  },
+                  "Next": "Yes"
+                },
+                {
+                  "Variable": "$.LatestStreamArn",
+                  "StringEquals": "",
+                  "Next": "No"
+                }
+              ],
+              "Default": "No"
+            },
+            "No": {
+              "Type": "Pass",
+              "Next": "Wait 1 sec"
+            },
+            "Wait 1 sec": {
+              "Comment": "A Wait state delays the state machine from continuing for a specified time.",
+              "Type": "Wait",
+              "Seconds": 1,
+              "Next": "GlobalTableChecker"
+            },
+            "Yes": {
+              "Type": "Pass",
+              "End": true
+            }
+          }
+        }
+
+  StackCheckerCustomResourceLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      Description: Checks to see if the current stack update is supported
+      Code:
+        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+      Handler: "custom-resources/stack-checker.handler"
+      Role: !GetAtt StackCheckerCustomResourceLambdaRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 120
+      MemorySize: 128
+      Environment:
+        Variables:
+          FIXED_PARAMETERS: !Join [ ",", [ SecondaryRegion, PrimaryUserPoolId, BackupTableName, AnonymousDataUUID, ParentStackName, PrimaryRegion, ImportNewUsersQueueNamePrefix, SolutionInstanceUUID, UserImportJobMappingFileBucketPrefix, ExportWorkflowQueueNamePrefix ] ]
+
+  StackCheckerCustomResourceLambdaRole:
+    Type: AWS::IAM::Role
+    DependsOn: SecondaryUserPoolTable
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+        - PolicyName: SSMParametersPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:DeleteParameter
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}-${AWS::Region}/fixed-solution-parameters
+        - PolicyName: CognitoPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  # - cognito-idp:GetUserPoolMfaConfig
+                  - cognito-idp:DescribeUserPool
+                Resource:
+                  - !Sub arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${PrimaryUserPoolId}
+
+  StackCheckerCustomResource:
+    Type: Custom::StackChecker
+    Properties:
+      ServiceToken: !GetAtt StackCheckerCustomResourceLambda.Arn
+      PrimaryUserPoolId: !Ref PrimaryUserPoolId
+      SecondaryRegion: !Ref SecondaryRegion
+      BackupTableName: !Ref BackupTable
+      AnonymousDataUUID: !GetAtt SolutionConstantsCustomResource.AnonymousDataUUID
+      ParentStackName: !Ref AWS::StackName
+      PrimaryRegion: !Ref AWS::Region
+      ExportWorkflowQueueNamePrefix: "export-workflow"
+      ImportNewUsersQueueNamePrefix: "import-new-users"
+      SolutionInstanceUUID: !GetAtt SolutionConstantsCustomResource.SolutionInstanceUUID
+      UserImportJobMappingFileBucketPrefix: !GetAtt SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix
+
+  SolutionConstantsCustomResourceLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      Description: Generates values to be used within the solution
+      Code:
+        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+      Handler: "custom-resources/solution-constants.handler"
+      Role: !GetAtt SolutionConstantsCustomResourceLambdaRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 60
+      MemorySize: 128
+
+  SolutionConstantsCustomResourceLambdaRole:
+    Type: AWS::IAM::Role
+    DependsOn: SecondaryUserPoolTable
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+
+  SolutionConstantsCustomResource:
+    Type: Custom::SolutionConstants
+    Properties:
+      ServiceToken: !GetAtt SolutionConstantsCustomResourceLambda.Arn
+      StackName: !Ref AWS::StackName
+
+  StackSetManagerCustomResourceLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      Description: Custom resource to manage the solution's StackSet
+      Code:
+        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+      Handler: "custom-resources/stackset-manager.handler"
+      Role: !GetAtt StackSetManagerCustomResourceLambdaRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 300
+      MemorySize: 128
+      Environment:
+        Variables:
+          SEND_METRIC: !FindInMap ["MetricsMap", "Send-Data", "SendAnonymousData"]
+          METRICS_ANONYMOUS_UUID: !GetAtt SolutionConstantsCustomResource.AnonymousDataUUID
+          SOLUTION_ID: "SO0126"
+          SOLUTION_VERSION: "VERSION_PLACEHOLDER"
+          COGNITO_TPS: !Ref CognitoTPS
+          EXPORT_FREQUENCY: !Ref ExportFrequency
+          SNS_PREFERENCE: !Ref SnsPreference
+          STATE_MACHINE_ARN: !Ref StackSetCheckStatusWorkflow
+
+  StackSetManagerCustomResourceLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+        - PolicyName: ManageStackSetPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStackSet
+                  - cloudformation:UpdateStackSet
+                  - cloudformation:CreateStackInstances
+                  - cloudformation:ListStackInstances
+                  - cloudformation:DeleteStackInstances
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/${SolutionConstantsCustomResource.StackSetName}:*"
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub
+                  - "arn:${AWS::Partition}:s3:::${S3Bucket}-${AWS::Region}/${KeyPrefix}/stack-set-template.template"
+                  - S3Bucket: !FindInMap ["SourceCode", "General", "S3Bucket"]
+                    KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !GetAtt StackSetAdminRole.Arn
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource:
+                  - !Ref StackSetCheckStatusWorkflow
+
+  StackSetManagerCustomResource:
+    Type: Custom::StackSet
+    Properties:
+      TemplateURL: !Sub
+        - "https://${S3Bucket}-${AWS::Region}.s3.amazonaws.com/${KeyPrefix}/stack-set-template.template"
+        - S3Bucket: !FindInMap ["SourceCode", "General", "S3Bucket"]
+          KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
+      ServiceToken: !GetAtt StackSetManagerCustomResourceLambda.Arn
+      StackSetName: !GetAtt SolutionConstantsCustomResource.StackSetName
+      AdministrationRoleARN: !GetAtt StackSetAdminRole.Arn
+      ExecutionRoleName: !Ref StackSetExecRole
+      AccountId: !Ref AWS::AccountId
+      SecondaryRegion: !Ref SecondaryRegion
+      StackSetParameters:
+        PrimaryRegion: !Ref AWS::Region
+        CognitoTPS: !Ref CognitoTPS
+        SendAnonymousData: !FindInMap ["MetricsMap", "Send-Data", "SendAnonymousData"]
+        ExportFrequency: !Ref ExportFrequency
+        NotificationEmail: !Ref NotificationEmail
+        SnsPreference: !Ref SnsPreference
+        ParentStackName: !Ref AWS::StackName
+
+  StackSetAdminRole:
+    # Gives CloudFormation the permission to assume the StackSetExecRole
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cloudformation.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: StackSetAdminPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource:
+                  - !GetAtt StackSetExecRole.Arn
+
+  StackSetExecRole:
+    # Gives CloudFormation the permission to manage the StackSet resources in both regions
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: >-
+              cloudformation:*, sns:* - The StackSetExecRole role will be assumed by CloudFormation as it provisions StackSet resources. Permissions to CloudFormation and SNS are needed to perform actions and report status
+              lambda:CreateEventSourceMapping, lambda:DeleteEventSourceMapping - As resource would be UUID, we cannot narrow down the permission.
+          - id: F3
+            reason: >-
+              cloudformation:*, sns:* - The StackSetExecRole role will be assumed by CloudFormation as it provisions StackSet resources. Permissions to CloudFormation and SNS are needed to perform actions and report status
+              lambda:CreateEventSourceMapping, lambda:DeleteEventSourceMapping, lambda:GetEventSourceMapping - As resource would be UUID, we cannot narrow down the permission.
+          - id: W76
+            reason: SPCM for IAM policy document is higher than 25 - All permissions are required.
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: StackSetExecPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:*
+                Resource:
+                  - '*'
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                Resource:
+                  - '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  # Allow the StackSet to get nested templates and lambda packages for this solutions s3 bucket/prefix
+                  - !Join ["", ["arn:aws:s3:::", !FindInMap ["SourceCode", "General", "S3Bucket"], "-", Ref: "AWS::Region", "/", !FindInMap ["SourceCode", "General", "KeyPrefix"], "/*"]]
+                  - !Join ["", ["arn:aws:s3:::", !FindInMap ["SourceCode", "General", "S3Bucket"], "-", Ref: "SecondaryRegion", "/", !FindInMap ["SourceCode", "General", "KeyPrefix"], "/*"]]
+              - Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:InvokeFunction
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:UpdateFunctionCode
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:ListTags
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                Resource:
+                  - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:StackSet-${SolutionConstantsCustomResource.FormattedStackName}*
+                  - !Sub arn:${AWS::Partition}:lambda:${SecondaryRegion}:${AWS::AccountId}:function:StackSet-${SolutionConstantsCustomResource.FormattedStackName}*
+              - Effect: Allow
+                Action:
+                  - lambda:CreateEventSourceMapping
+                  - lambda:DeleteEventSourceMapping
+                  - lambda:GetEventSourceMapping
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRole
+                  - iam:PassRole
+                Resource:
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/StackSet-${SolutionConstantsCustomResource.FormattedStackName}*
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/StackSet-${SolutionConstantsCustomResource.FormattedStackName}*
+              - Effect: Allow
+                Action:
+                  - sqs:CreateQueue
+                  - sqs:DeleteQueue
+                  - sqs:GetQueueAttributes
+                  - sqs:TagQueue
+                  - sqs:UntagQueue
+                Resource:
+                  - !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:import-new-users-${SolutionConstantsCustomResource.SolutionInstanceUUID}
+                  - !Sub arn:${AWS::Partition}:sqs:${SecondaryRegion}:${AWS::AccountId}:import-new-users-${SolutionConstantsCustomResource.SolutionInstanceUUID}-updates
+                  - !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:import-new-users-${SolutionConstantsCustomResource.SolutionInstanceUUID}-dlq
+                  - !Sub arn:${AWS::Partition}:sqs:${SecondaryRegion}:${AWS::AccountId}:import-new-users-${SolutionConstantsCustomResource.SolutionInstanceUUID}
+                  - !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:import-new-users-${SolutionConstantsCustomResource.SolutionInstanceUUID}-updates
+                  - !Sub arn:${AWS::Partition}:sqs:${SecondaryRegion}:${AWS::AccountId}:import-new-users-${SolutionConstantsCustomResource.SolutionInstanceUUID}-dlq
+                  - !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:export-workflow-${SolutionConstantsCustomResource.SolutionInstanceUUID}
+                  - !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:export-workflow-${SolutionConstantsCustomResource.SolutionInstanceUUID}-dlq
+              - Effect: Allow
+                Action:
+                  - states:CreateStateMachine
+                  - states:DeleteStateMachine
+                  - states:UpdateStateMachine
+                  - states:TagResource
+                  - states:ListTagsForResource
+                Resource:
+                  - !Sub arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:*
+                  - !Sub arn:${AWS::Partition}:states:${SecondaryRegion}:${AWS::AccountId}:stateMachine:*
+              - Effect: Allow
+                Action:
+                  - events:PutRule
+                  - events:DescribeRule
+                  - events:DeleteRule
+                  - events:PutTargets
+                  - events:RemoveTargets
+                Resource:
+                  - !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/StackSet-${SolutionConstantsCustomResource.FormattedStackName}*
+                  - !Sub arn:${AWS::Partition}:events:${SecondaryRegion}:${AWS::AccountId}:rule/StackSet-${SolutionConstantsCustomResource.FormattedStackName}*
+              - Effect: Allow
+                Action:
+                  - sns:CreateTopic
+                  - sns:DeleteTopic
+                Resource:
+                  - !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:cognito-user-profiles-export-reference-architecture-${AWS::Region}-${SolutionConstantsCustomResource.SolutionInstanceUUID}
+                  - !Sub arn:${AWS::Partition}:sns:${SecondaryRegion}:${AWS::AccountId}:cognito-user-profiles-export-reference-architecture-${SecondaryRegion}-${SolutionConstantsCustomResource.SolutionInstanceUUID}
+              - Effect: Allow
+                Action:
+                  - iam:TagRole
+                  - tag:TagResources
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:PutEncryptionConfiguration
+                  - s3:PutBucketVersioning
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:PutBucketAcl
+                  - s3:PutBucketLogging
+                  - s3:PutBucketTagging
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${AWS::Region}
+                  - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${AWS::Region}-logs
+                  - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${AWS::Region}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${AWS::Region}-logs/*
+                  - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${SecondaryRegion}
+                  - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${SecondaryRegion}-logs
+                  - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${SecondaryRegion}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${SecondaryRegion}-logs/*
+
+  StackSetCheckStatusLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      Description: Checks the status of the solution's StackSet and when ready, responds to CloudFormation
+      Code:
+        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+      Handler: "custom-resources/check-stackset-status.handler"
+      Role: !GetAtt StackSetCheckStatusLambdaRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 300
+      MemorySize: 128
+
+  StackSetCheckStatusLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+        - PolicyName: CloudFormationPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:DeleteStackSet
+                  - cloudformation:ListStackSetOperationResults
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/${SolutionConstantsCustomResource.StackSetName}:*"
+
+  StackSetCheckStatusWorkflowRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - states.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /service-role/
+      Policies:
+        - PolicyName: StepFunctionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !GetAtt StackSetCheckStatusLambda.Arn
+
+  StackSetCheckStatusWorkflow:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      Tags:
+        - Key: solution-id-SO0126
+          Value: !Sub ${AWS::StackName}-${AWS::Region}
+      RoleArn: !GetAtt StackSetCheckStatusWorkflowRole.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "SOLUTION_NAME_PLACEHOLDER VERSION_PLACEHOLDER: Checks the status of the solution's StackSet and when ready, responds to CloudFormation",
+          "StartAt": "StackSetCheckStatusLambda",
+          "States": {
+            "StackSetCheckStatusLambda": {
+              "Type": "Task",
+              "Resource": "${StackSetCheckStatusLambda.Arn}",
+              "Parameters": {
+                "Input.$": "$",
+                "Context.$": "$$"
+              },
+              "OutputPath": "$.result",
+              "Next": "Has responded to CloudFormation?"
+            },
+            "Has responded to CloudFormation?": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.HasRespondedToCfn",
+                  "BooleanEquals": true,
+                  "Next": "Yes"
+                }
+              ],
+              "Default": "No"
+            },
+            "No": {
+              "Type": "Pass",
+              "Next": "Wait 5 sec"
+            },
+            "Wait 5 sec": {
+              "Comment": "A Wait state delays the state machine from continuing for a specified time.",
+              "Type": "Wait",
+              "Seconds": 5,
+              "Next": "StackSetCheckStatusLambda"
+            },
+            "Yes": {
+              "Type": "Pass",
+              "End": true
+            }
+          }
+        }
+
+Outputs:
+  BackupTableName:
+    Description: Name of the DynamoDB Global Table containing the backed up user pool data
+    Value: !Ref BackupTable
+  UserImportJobMappingFileBucketPrefix:
+    Description: Prefix for the name of the S3 bucket that will contain mapping files for the Cognito user import jobs
+    Value: !GetAtt SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix
