@@ -51,7 +51,7 @@ export VERSION=my-version # version number for the customized code
 ### 5. Create an Amazon S3 bucket
 The AWS CloudFormation template is configured to pull the AWS Lambda deployment packages from Amazon S3 bucket in the region the template is being launched in. Create a bucket in the desitred region name appended to the name of the bucket. _Note:_ you must have the AWS Command Line Interface installed.
 ```bash
-aws s3 mb s3://$DIST_OUTPUT_BUCKET-$REGION --region $REGION
+aws s3 mb s3://$DIST_OUTPUT_BUCKET --region $REGION
 ```
 
 ### 6. Build the Cognito User Profiles Export Reference Architecture for deployment
@@ -63,7 +63,7 @@ chmod +x ./build-s3-dist.sh
 ### 7. Upload deployment assets to your Amazon S3 bucket
 * Deploy the distributable to an Amazon S3 bucket in your account. _Note:_ you must have the AWS Command Line Interface installed.
 ```bash
-aws s3 cp ./regional-s3-assets/ s3://$DIST_OUTPUT_BUCKET-$REGION/$SOLUTION_NAME/$VERSION/ --recursive --acl bucket-owner-full-control
+aws s3 cp ./regional-s3-assets/ s3://$DIST_OUTPUT_BUCKET/$SOLUTION_NAME/$VERSION/ --recursive --acl bucket-owner-full-control
 ```
 
 ### 8. Launch the Cognito User Profiles Export Reference Architecture
