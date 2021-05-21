@@ -40,3 +40,20 @@ exports.sendAnonymousMetric = async (solutionId, solutionVersion, solutionUUID, 
         console.error(err);
     }
 };
+
+/**
+ * If the solution ID and version environment variables are set, this will return 
+ * an object with a custom user agent string. Otherwise, the object returned will be empty
+ */
+exports.getOptions = (existingOptions = {}) => {
+    const { SOLUTION_ID, SOLUTION_VERSION } = process.env;
+    const options = {};
+
+    if (SOLUTION_ID && SOLUTION_VERSION) {
+        if (SOLUTION_ID.trim() !== '' && SOLUTION_VERSION.trim() !== '') {
+            options.customUserAgent = `AwsSolution/${SOLUTION_ID}/${SOLUTION_VERSION}`;
+        }
+    }
+
+    return Object.assign(options, existingOptions);
+}

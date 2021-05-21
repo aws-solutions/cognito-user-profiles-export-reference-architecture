@@ -5,8 +5,10 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
+
 const AWS = require('aws-sdk');
-const cognitoISP = new AWS.CognitoIdentityServiceProvider();
+const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
 const { sleep } = require('../utils/helper-functions');
 
 /**

@@ -5,8 +5,9 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
-const stepFunctions = new AWS.StepFunctions();
+const stepFunctions = new AWS.StepFunctions(getOptions());
 
 /**
  * Returns whether a state machine has multiple executions running

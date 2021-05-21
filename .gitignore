@@ -1,2 +1,29 @@
-node_modules/
-coverage/
+# compiled output
+**/dist
+**/global-s3-assets
+**/regional-s3-assets
+**/open-source
+**/.zip
+**/tmp
+**/out-tsc
+**/coverage
+
+# dependencies
+**/node_modules
+
+# e2e
+**/e2e/*.js
+**/e2e/*.map
+
+# misc
+**/npm-debug.log
+**/testem.log
+**/.vscode/settings.json
+**/create-stack.sh
+**/update-packages.sh
+**/package-lock.json
+
+# System Files
+**/.DS_Store
+**/.vscode
+source/test

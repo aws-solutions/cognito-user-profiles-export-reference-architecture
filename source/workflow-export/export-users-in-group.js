@@ -5,9 +5,10 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
-const cognitoISP = new AWS.CognitoIdentityServiceProvider();
-const docClient = new AWS.DynamoDB.DocumentClient();
+const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
+const docClient = new AWS.DynamoDB.DocumentClient(getOptions());
 const ONE_MINUTE = 60000;
 const { sleep, getExponentialBackoffTimeInMS } = require('../utils/helper-functions');
 const { COGNITO_TPS, USER_POOL_ID, BACKUP_TABLE_NAME, AWS_REGION } = process.env;

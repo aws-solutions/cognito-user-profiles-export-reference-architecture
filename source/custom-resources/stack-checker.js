@@ -5,9 +5,11 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
+
 const AWS = require('aws-sdk');
-const ssm = new AWS.SSM();
-const cognitoISP = new AWS.CognitoIdentityServiceProvider();
+const ssm = new AWS.SSM(getOptions());
+const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
 const CustomResourceHelperFunctions = require('../utils/custom-resource-helper-functions');
 const { AWS_REGION, FIXED_PARAMETERS } = process.env;
 const fixedParameters = FIXED_PARAMETERS.split(',');

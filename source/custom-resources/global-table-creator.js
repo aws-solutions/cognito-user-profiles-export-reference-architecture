@@ -5,9 +5,10 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
-const dynamodb = new AWS.DynamoDB();
-const stepFunctions = new AWS.StepFunctions();
+const dynamodb = new AWS.DynamoDB(getOptions());
+const stepFunctions = new AWS.StepFunctions(getOptions());
 const axios = require('axios');
 
 /**

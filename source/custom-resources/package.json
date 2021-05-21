@@ -5,24 +5,23 @@
     "name": "aws-solutions-builder"
   },
   "license": "Apache-2.0",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "dependencies": {
     "axios": "^0.21.1",
     "uuid": "^8.1.0"
   },
   "devDependencies": {
-    "aws-sdk": "*",
-    "jest": "*",
-    "axios-mock-adapter": "*"
+    "aws-sdk": "^2.904.0",
+    "axios-mock-adapter": "^1.19.0",
+    "jest": "^26.6.3"
   },
   "scripts": {
-    "pretest": "npm ci",
-    "clean": "rm -rf dist/ node_modules/ coverage/",
+    "clean": "rm -rf dist/ node_modules/ coverage/ package-lock.json",
     "test": "jest test/*.spec.js --coverage --silent",
     "package:zip": "cd dist && zip -rq package.zip .",
     "package:dist": "mkdir dist && rsync -avr ../utils ./dist/ && rsync -avr --exclude=*test* --exclude=*dist* --exclude=*node_modules* ./ ./dist/$npm_package_name && rsync -avr ./node_modules ./dist/$npm_package_name",
-    "package": "npm run clean && npm ci --production && npm run package:dist && npm run package:zip",
+    "package": "npm run clean && npm install --production && npm run package:dist && npm run package:zip",
     "build": "npm run clean && rm -rf package-lock.json && npm install"
   }
 }

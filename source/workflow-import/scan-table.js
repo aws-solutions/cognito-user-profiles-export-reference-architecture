@@ -5,10 +5,11 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
-const docClient = new AWS.DynamoDB.DocumentClient();
-const cognitoISP = new AWS.CognitoIdentityServiceProvider();
-const sqs = new AWS.SQS();
+const docClient = new AWS.DynamoDB.DocumentClient(getOptions());
+const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
+const sqs = new AWS.SQS(getOptions());
 const { sleep } = require('../utils/helper-functions');
 const { BACKUP_TABLE_NAME, TYPE_GROUP, TYPE_USER, COGNITO_TPS,
     TYPE_TIMESTAMP, NEW_USERS_QUEUE_URL, NEW_USERS_UPDATES_QUEUE_URL } = process.env;

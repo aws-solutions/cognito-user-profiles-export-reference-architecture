@@ -107,5 +107,5 @@ exports.getExponentialBackoffTimeInMS = (base, attempt, max, withJitter = false)
         return backOffTime;
     }
 
-    return 1 + Math.floor(Math.random() * backOffTime);
+    return 1 + Math.floor(Math.random() * backOffTime); //NOSONAR
 };

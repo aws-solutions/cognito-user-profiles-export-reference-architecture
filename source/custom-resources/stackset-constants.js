@@ -5,6 +5,7 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const CustomResourceHelperFunctions = require('../utils/custom-resource-helper-functions');
 const AWS = require('aws-sdk');
 
@@ -21,7 +22,7 @@ exports.handler = async (event, context) => {
  */
 const handleCreate = async function handleCreate(event) {
     const { ParentStackName, PrimaryRegion } = event.ResourceProperties;
-    const ssm = new AWS.SSM({ region: PrimaryRegion });
+    const ssm = new AWS.SSM(getOptions({ region: PrimaryRegion }));
     const ssmParameterName = `/${ParentStackName}-${PrimaryRegion}/fixed-solution-parameters`;
     const getParams = { Name: ssmParameterName };
 

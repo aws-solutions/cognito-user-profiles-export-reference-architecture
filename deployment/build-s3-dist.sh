@@ -61,7 +61,7 @@ echo "[Building] Utils"
 echo "------------------------------------------------------------------------------"
 cd $source_dir/utils
 npm run clean
-npm ci --production
+npm install --production
 
 declare -a lambda_packages=(
   "custom-resources"
@@ -88,5 +88,6 @@ do
     echo "------------------------------------------------------------------------------"
     exit 1
   fi
-  cp ./dist/package.zip $build_dist_dir/$lambda_package.zip
+  mv ./dist/package.zip $build_dist_dir/$lambda_package.zip
+  npm run clean
 done

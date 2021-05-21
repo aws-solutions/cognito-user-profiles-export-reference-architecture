@@ -17,7 +17,7 @@ Parameters:
     AllowedPattern: ^[\w-]+_[0-9a-zA-Z]+$
   SecondaryRegion:
     Type: String
-    AllowedPattern: ^[\w-]+$
+    AllowedPattern: ^[a-z]{2}-[a-z]+-\d{1}$
   ExportFrequency:
     Type: String
     Default: "EVERY_DAY"
@@ -53,7 +53,7 @@ Metadata:
       PrimaryUserPoolId:
         default: "PrimaryUserPoolId: The ID of the Cognito User Pool that will be backed up (Required)"
       SecondaryRegion:
-        default: "SecondaryRegion: The region in which the Secondary User Pool was created (Required)"
+        default: "SecondaryRegion: The region that will serve as backup (Required)"
       ExportFrequency:
         default: "ExportFrequency: The frequency at which the ExportWorkflow will run (Required)"
       CognitoTPS:
@@ -64,14 +64,13 @@ Metadata:
         default: "SnsPreference: INFO_AND_ERRORS - The solution will publish a message to the SNS topic each time a workflow completes and if there are errors detected. ERRORS_ONLY - The solution will only publish messages if an error is detected (Required)"
 
 Mappings:
-  MetricsMap:
-    Send-Data:
+  Solution:
+    Config:
       SendAnonymousData: "Yes" # change to 'No' to disable the collection of anonymous Operational Metrics for this solution
-
-  SourceCode:
-    General:
-      S3Bucket: BUCKET_NAME_PLACEHOLDER
-      KeyPrefix: SOLUTION_NAME_PLACEHOLDER/VERSION_PLACEHOLDER
+      SolutionId: SO0126
+      Version: VERSION_PLACEHOLDER
+      S3BucketPrefix: BUCKET_NAME_PLACEHOLDER
+      S3KeyPrefix: SOLUTION_NAME_PLACEHOLDER/VERSION_PLACEHOLDER
 
 Resources:
   BackupTable:
@@ -101,16 +100,27 @@ Resources:
 
   GlobalTableCreator:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: VPC for Lambda is not needed. This serverless architecture does not deploy a VPC.
+          - id: W92
+            reason: ReservedConcurrentExecutions is not needed for this Lambda function.
     Properties:
       Description: Secondary user pool table creator
       Code:
-        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
-        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+        S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/global-table-creator.handler"
       Role: !GetAtt GlobalTableCreatorRole.Arn
-      Runtime: nodejs12.x
+      Runtime: nodejs14.x
       Timeout: 120
       MemorySize: 128
+      Environment:
+        Variables:
+          SOLUTION_ID: !FindInMap ["Solution", "Config", "SolutionId"]
+          SOLUTION_VERSION: !FindInMap ["Solution", "Config", "Version"]
       Tags:
         - Key: solution-id-SO0126
           Value: !Sub ${AWS::StackName}-${AWS::Region}
@@ -187,23 +197,32 @@ Resources:
 
   GlobalTableChecker:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: VPC for Lambda is not needed. This serverless architecture does not deploy a VPC.
+          - id: W92
+            reason: ReservedConcurrentExecutions is not needed for this Lambda function.
     Properties:
       Tags:
         - Key: solution-id-SO0126
           Value: !Sub ${AWS::StackName}-${AWS::Region}
       Description: Secondary user pool table readiness checker
       Code:
-        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
-        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+        S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/global-table-checker.handler"
       Role: !GetAtt GlobalTableCheckerRole.Arn
-      Runtime: nodejs12.x
+      Runtime: nodejs14.x
       Timeout: 300
       MemorySize: 128
       Environment:
         Variables:
           USER_POOL_TABLE: !Ref BackupTable
           SECONDARY_REGION: !Ref SecondaryRegion
+          SOLUTION_ID: !FindInMap ["Solution", "Config", "SolutionId"]
+          SOLUTION_VERSION: !FindInMap ["Solution", "Config", "Version"]
 
   GlobalTableCheckerRole:
     Type: AWS::IAM::Role
@@ -333,22 +352,31 @@ Resources:
 
   StackCheckerCustomResourceLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: VPC for Lambda is not needed. This serverless architecture does not deploy a VPC.
+          - id: W92
+            reason: ReservedConcurrentExecutions is not needed for this Lambda function.
     Properties:
       Tags:
         - Key: solution-id-SO0126
           Value: !Sub ${AWS::StackName}-${AWS::Region}
       Description: Checks to see if the current stack update is supported
       Code:
-        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
-        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+        S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/stack-checker.handler"
       Role: !GetAtt StackCheckerCustomResourceLambdaRole.Arn
-      Runtime: nodejs12.x
+      Runtime: nodejs14.x
       Timeout: 120
       MemorySize: 128
       Environment:
         Variables:
-          FIXED_PARAMETERS: !Join [ ",", [ SecondaryRegion, PrimaryUserPoolId, BackupTableName, AnonymousDataUUID, ParentStackName, PrimaryRegion, ImportNewUsersQueueNamePrefix, SolutionInstanceUUID, UserImportJobMappingFileBucketPrefix, ExportWorkflowQueueNamePrefix ] ]
+          FIXED_PARAMETERS: !Join [ ",", [ SecondaryRegion, PrimaryUserPoolId, BackupTableName, AnonymousDataUUID, ParentStackName, FormattedStackName, PrimaryRegion, ImportNewUsersQueueNamePrefix, SolutionInstanceUUID, UserImportJobMappingFileBucketPrefix, ExportWorkflowQueueNamePrefix ] ]
+          SOLUTION_ID: !FindInMap ["Solution", "Config", "SolutionId"]
+          SOLUTION_VERSION: !FindInMap ["Solution", "Config", "Version"]
 
   StackCheckerCustomResourceLambdaRole:
     Type: AWS::IAM::Role
@@ -410,6 +438,7 @@ Resources:
       BackupTableName: !Ref BackupTable
       AnonymousDataUUID: !GetAtt SolutionConstantsCustomResource.AnonymousDataUUID
       ParentStackName: !Ref AWS::StackName
+      FormattedStackName: !GetAtt SolutionConstantsCustomResource.FormattedStackName
       PrimaryRegion: !Ref AWS::Region
       ExportWorkflowQueueNamePrefix: "export-workflow"
       ImportNewUsersQueueNamePrefix: "import-new-users"
@@ -418,19 +447,30 @@ Resources:
 
   SolutionConstantsCustomResourceLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: VPC for Lambda is not needed. This serverless architecture does not deploy a VPC.
+          - id: W92
+            reason: ReservedConcurrentExecutions is not needed for this Lambda function.
     Properties:
       Tags:
         - Key: solution-id-SO0126
           Value: !Sub ${AWS::StackName}-${AWS::Region}
       Description: Generates values to be used within the solution
       Code:
-        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
-        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+        S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/solution-constants.handler"
       Role: !GetAtt SolutionConstantsCustomResourceLambdaRole.Arn
-      Runtime: nodejs12.x
+      Runtime: nodejs14.x
       Timeout: 60
       MemorySize: 128
+      Environment:
+        Variables:
+          SOLUTION_ID: !FindInMap ["Solution", "Config", "SolutionId"]
+          SOLUTION_VERSION: !FindInMap ["Solution", "Config", "Version"]
 
   SolutionConstantsCustomResourceLambdaRole:
     Type: AWS::IAM::Role
@@ -470,29 +510,36 @@ Resources:
 
   StackSetManagerCustomResourceLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: VPC for Lambda is not needed. This serverless architecture does not deploy a VPC.
+          - id: W92
+            reason: ReservedConcurrentExecutions is not needed for this Lambda function.
     Properties:
       Tags:
         - Key: solution-id-SO0126
           Value: !Sub ${AWS::StackName}-${AWS::Region}
       Description: Custom resource to manage the solution's StackSet
       Code:
-        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
-        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+        S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/stackset-manager.handler"
       Role: !GetAtt StackSetManagerCustomResourceLambdaRole.Arn
-      Runtime: nodejs12.x
+      Runtime: nodejs14.x
       Timeout: 300
       MemorySize: 128
       Environment:
         Variables:
-          SEND_METRIC: !FindInMap ["MetricsMap", "Send-Data", "SendAnonymousData"]
+          SEND_METRIC: !FindInMap ["Solution", "Config", "SendAnonymousData"]
           METRICS_ANONYMOUS_UUID: !GetAtt SolutionConstantsCustomResource.AnonymousDataUUID
-          SOLUTION_ID: "SO0126"
-          SOLUTION_VERSION: "VERSION_PLACEHOLDER"
           COGNITO_TPS: !Ref CognitoTPS
           EXPORT_FREQUENCY: !Ref ExportFrequency
           SNS_PREFERENCE: !Ref SnsPreference
           STATE_MACHINE_ARN: !Ref StackSetCheckStatusWorkflow
+          SOLUTION_ID: !FindInMap ["Solution", "Config", "SolutionId"]
+          SOLUTION_VERSION: !FindInMap ["Solution", "Config", "Version"]
 
   StackSetManagerCustomResourceLambdaRole:
     Type: AWS::IAM::Role
@@ -540,8 +587,8 @@ Resources:
                   - s3:GetObject
                 Resource: !Sub
                   - "arn:${AWS::Partition}:s3:::${S3Bucket}-${AWS::Region}/${KeyPrefix}/stack-set-template.template"
-                  - S3Bucket: !FindInMap ["SourceCode", "General", "S3Bucket"]
-                    KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
+                  - S3Bucket: !FindInMap ["Solution", "Config", "S3BucketPrefix"]
+                    KeyPrefix: !FindInMap ["Solution", "Config", "S3KeyPrefix"]
               - Effect: Allow
                 Action:
                   - iam:PassRole
@@ -558,8 +605,8 @@ Resources:
     Properties:
       TemplateURL: !Sub
         - "https://${S3Bucket}-${AWS::Region}.s3.amazonaws.com/${KeyPrefix}/stack-set-template.template"
-        - S3Bucket: !FindInMap ["SourceCode", "General", "S3Bucket"]
-          KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
+        - S3Bucket: !FindInMap ["Solution", "Config", "S3BucketPrefix"]
+          KeyPrefix: !FindInMap ["Solution", "Config", "S3KeyPrefix"]
       ServiceToken: !GetAtt StackSetManagerCustomResourceLambda.Arn
       StackSetName: !GetAtt SolutionConstantsCustomResource.StackSetName
       AdministrationRoleARN: !GetAtt StackSetAdminRole.Arn
@@ -569,7 +616,7 @@ Resources:
       StackSetParameters:
         PrimaryRegion: !Ref AWS::Region
         CognitoTPS: !Ref CognitoTPS
-        SendAnonymousData: !FindInMap ["MetricsMap", "Send-Data", "SendAnonymousData"]
+        SendAnonymousData: !FindInMap ["Solution", "Config", "SendAnonymousData"]
         ExportFrequency: !Ref ExportFrequency
         NotificationEmail: !Ref NotificationEmail
         SnsPreference: !Ref SnsPreference
@@ -649,8 +696,8 @@ Resources:
                   - s3:GetObject
                 Resource:
                   # Allow the StackSet to get nested templates and lambda packages for this solutions s3 bucket/prefix
-                  - !Join ["", ["arn:aws:s3:::", !FindInMap ["SourceCode", "General", "S3Bucket"], "-", Ref: "AWS::Region", "/", !FindInMap ["SourceCode", "General", "KeyPrefix"], "/*"]]
-                  - !Join ["", ["arn:aws:s3:::", !FindInMap ["SourceCode", "General", "S3Bucket"], "-", Ref: "SecondaryRegion", "/", !FindInMap ["SourceCode", "General", "KeyPrefix"], "/*"]]
+                  - !Join ["", ["arn:aws:s3:::", !FindInMap ["Solution", "Config", "S3BucketPrefix"], "-", Ref: "AWS::Region", "/", !FindInMap ["Solution", "Config", "S3KeyPrefix"], "/*"]]
+                  - !Join ["", ["arn:aws:s3:::", !FindInMap ["Solution", "Config", "S3BucketPrefix"], "-", Ref: "SecondaryRegion", "/", !FindInMap ["Solution", "Config", "S3KeyPrefix"], "/*"]]
               - Effect: Allow
                 Action:
                   - lambda:CreateFunction
@@ -757,19 +804,30 @@ Resources:
 
   StackSetCheckStatusLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: VPC for Lambda is not needed. This serverless architecture does not deploy a VPC.
+          - id: W92
+            reason: ReservedConcurrentExecutions is not needed for this Lambda function.
     Properties:
       Tags:
         - Key: solution-id-SO0126
           Value: !Sub ${AWS::StackName}-${AWS::Region}
       Description: Checks the status of the solution's StackSet and when ready, responds to CloudFormation
       Code:
-        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref "AWS::Region"]]
-        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"], "custom-resources.zip"]]
+        S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], !Ref "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/check-stackset-status.handler"
       Role: !GetAtt StackSetCheckStatusLambdaRole.Arn
-      Runtime: nodejs12.x
+      Runtime: nodejs14.x
       Timeout: 300
       MemorySize: 128
+      Environment:
+        Variables:
+          SOLUTION_ID: !FindInMap ["Solution", "Config", "SolutionId"]
+          SOLUTION_VERSION: !FindInMap ["Solution", "Config", "Version"]
 
   StackSetCheckStatusLambdaRole:
     Type: AWS::IAM::Role

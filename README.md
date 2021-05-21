@@ -11,6 +11,7 @@ For more information and a detailed deployment guide visit the [solution home pa
 - [Architecture Overview](#architecture-overview)
 - [Getting Started](#getting-started)
 - [File Structure](#file-structure)
+- [Collection of operational metrics](#collection-of-operational-metrics)
 - [License](#license)
 
 ## Architecture Overview
@@ -43,6 +44,7 @@ chmod +x ./run-unit-tests.sh
 ### 4. Declare environment variables
 ```bash
 export REGION=aws-region-code # the AWS region to launch the solution (e.g. us-east-1)
+export SECONDARY_REGION=aws-region-code # the AWS region that will serve as backup (e.g. eu-central-1)
 export DIST_OUTPUT_BUCKET=my-bucket-name # bucket where customized code will reside
 export SOLUTION_NAME=my-solution-name
 export VERSION=my-version # version number for the customized code
@@ -52,6 +54,7 @@ export VERSION=my-version # version number for the customized code
 The AWS CloudFormation template is configured to pull the AWS Lambda deployment packages from Amazon S3 bucket in the region the template is being launched in. Create a bucket in the desitred region name appended to the name of the bucket. _Note:_ you must have the AWS Command Line Interface installed.
 ```bash
 aws s3 mb s3://$DIST_OUTPUT_BUCKET-$REGION --region $REGION
+aws s3 mb s3://$DIST_OUTPUT_BUCKET-$SECONDARY_REGION --region $SECONDARY_REGION
 ```
 
 ### 6. Build the Cognito User Profiles Export Reference Architecture for deployment
@@ -64,6 +67,7 @@ chmod +x ./build-s3-dist.sh
 * Deploy the distributable to an Amazon S3 bucket in your account. _Note:_ you must have the AWS Command Line Interface installed.
 ```bash
 aws s3 cp ./regional-s3-assets/ s3://$DIST_OUTPUT_BUCKET-$REGION/$SOLUTION_NAME/$VERSION/ --recursive --acl bucket-owner-full-control
+aws s3 cp ./regional-s3-assets/ s3://$DIST_OUTPUT_BUCKET-$SECONDARY_REGION/$SOLUTION_NAME/$VERSION/ --recursive --acl bucket-owner-full-control
 ```
 
 ### 8. Launch the Cognito User Profiles Export Reference Architecture
@@ -107,6 +111,10 @@ aws s3 cp ./regional-s3-assets/ s3://$DIST_OUTPUT_BUCKET-$REGION/$SOLUTION_NAME/
     |- scan-table.js                                            [ Scans the backup table and queues items for the Import Workflow ]
     |- update-new-users.js                                      [ Updates users that have been imported to the new user pool ]
 ```
+
+## Collection of operational metrics
+
+This solution collects anonymous operational metrics to help AWS improve the quality and features of the solution. For more information, including how to disable this capability, please see the [implementation guide](https://docs.aws.amazon.com/solutions/latest/cognito-user-profiles-export-reference-architecture/appendix-c.html).
 
 ## License
 Cognito User Profiles Export Reference Architecture is distributed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0).

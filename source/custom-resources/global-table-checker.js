@@ -7,9 +7,10 @@
 
 const { USER_POOL_TABLE, SECONDARY_REGION } = process.env;
 const ONE_MINUTE = 60 * 1000;
+const { getOptions } = require('../utils/metrics');
 
 const AWS = require('aws-sdk');
-const dynamodb = new AWS.DynamoDB({ region: SECONDARY_REGION });
+const dynamodb = new AWS.DynamoDB(getOptions({ region: SECONDARY_REGION }));
 const axios = require('axios');
 
 /**

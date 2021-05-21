@@ -5,10 +5,12 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
+
 const AWS = require('aws-sdk');
 const DynamoDB = require('aws-sdk/clients/dynamodb');
-const cognitoIdentityServiceProvider = new AWS.CognitoIdentityServiceProvider();
-const documentClient = new DynamoDB.DocumentClient();
+const cognitoIdentityServiceProvider = new AWS.CognitoIdentityServiceProvider(getOptions());
+const documentClient = new DynamoDB.DocumentClient(getOptions());
 
 const { AWS_REGION, USER_POOL_ID, TABLE_NAME, COGNITO_TPS, TYPE_USER } = process.env;
 const ONE_MINUTE = 60 * 1000;

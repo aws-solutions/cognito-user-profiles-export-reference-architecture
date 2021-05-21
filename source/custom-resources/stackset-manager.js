@@ -5,9 +5,10 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
-const cfn = new AWS.CloudFormation();
-const stepFunctions = new AWS.StepFunctions();
+const cfn = new AWS.CloudFormation(getOptions());
+const stepFunctions = new AWS.StepFunctions(getOptions());
 const axios = require('axios');
 const { AWS_REGION, STATE_MACHINE_ARN } = process.env;
 

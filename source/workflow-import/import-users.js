@@ -5,10 +5,11 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
-const cognitoISP = new AWS.CognitoIdentityServiceProvider();
-const sqs = new AWS.SQS();
-const s3 = new AWS.S3();
+const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
+const sqs = new AWS.SQS(getOptions());
+const s3 = new AWS.S3(getOptions());
 const {
     NEW_USERS_QUEUE_URL, USER_IMPORT_CLOUDWATCH_ROLE_ARN,
     USER_IMPORT_JOB_MAPPING_FILES_BUCKET, SEND_METRIC, METRICS_ANONYMOUS_UUID,

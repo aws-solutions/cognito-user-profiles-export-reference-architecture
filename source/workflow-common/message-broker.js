@@ -5,9 +5,11 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
+
 const AWS = require('aws-sdk');
-const sns = new AWS.SNS();
-const docClient = new AWS.DynamoDB.DocumentClient();
+const sns = new AWS.SNS(getOptions());
+const docClient = new AWS.DynamoDB.DocumentClient(getOptions());
 const { BACKUP_TABLE_NAME, TYPE_TIMESTAMP, SNS_MESSAGE_PREFERENCE, SEND_METRIC, METRICS_ANONYMOUS_UUID, SOLUTION_ID, SOLUTION_VERSION, AWS_REGION, IS_PRIMARY_REGION, NOTIFICATION_TOPIC } = process.env;
 const { sendAnonymousMetric } = require('../utils/metrics');
 

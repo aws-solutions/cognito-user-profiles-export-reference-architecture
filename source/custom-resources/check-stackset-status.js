@@ -5,8 +5,9 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
-const cfn = new AWS.CloudFormation();
+const cfn = new AWS.CloudFormation(getOptions());
 const axios = require('axios');
 
 /**

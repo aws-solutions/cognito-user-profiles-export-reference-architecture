@@ -1,0 +1,26 @@
+{
+    "roots": [
+        "<rootDir>/test"
+    ],
+    "moduleFileExtensions": [
+        "js"
+    ],
+    "coveragePathIgnorePatterns": [
+        "/node_modules/"
+    ],
+    "coverageReporters": [
+        "text",
+        [
+            "lcov",
+            {
+                "projectRoot": "../../"
+            }
+        ]
+    ],
+    "modulePathIgnorePatterns": [
+        "/node_modules/"
+    ],
+    "setupFiles": [
+        "./test/setEnvironmentVariables.js"
+    ]
+}

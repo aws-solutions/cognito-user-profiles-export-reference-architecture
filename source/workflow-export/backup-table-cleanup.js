@@ -5,9 +5,10 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
-const docClient = new AWS.DynamoDB.DocumentClient();
-const sqs = new AWS.SQS();
+const docClient = new AWS.DynamoDB.DocumentClient(getOptions());
+const sqs = new AWS.SQS(getOptions());
 const uuid = require('uuid');
 const { BACKUP_TABLE_NAME, QUEUE_URL } = process.env;
 const oneMinuteInMS = 60 * 1000;

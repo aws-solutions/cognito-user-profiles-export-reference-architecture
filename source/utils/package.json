@@ -1,11 +1,10 @@
 {
   "name": "utils",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Custom Resource Helper functions",
   "scripts": {
-    "pretest": "npm ci",
-    "clean": "rm -rf dist/ node_modules/ coverage/",
-    "test": "jest test/*.spec.js --coverage --silent"
+    "clean": "rm -rf dist/ node_modules/ coverage/ package-lock.json",
+    "test": "jest --config jestconfig.json --coverage --silent"
   },
   "author": {
     "name": "aws-solutions-builder"
@@ -16,7 +15,7 @@
     "moment": "^2.27.0"
   },
   "devDependencies": {
-    "axios-mock-adapter": "*",
-    "jest": "*"
+    "axios-mock-adapter": "^1.19.0",
+    "jest": "^26.6.3"
   }
 }

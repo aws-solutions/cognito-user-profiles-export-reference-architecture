@@ -5,8 +5,9 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
-const sqs = new AWS.SQS();
+const sqs = new AWS.SQS(getOptions());
 const { NEW_USERS_QUEUE_URL, UPDATES_QUEUE_URL } = process.env;
 
 /**
@@ -19,18 +20,16 @@ exports.handler = async (event) => {
     const stateMachineName = Context.StateMachine.Name.split('-')[0];
     const result = Input;
 
-    switch (stateMachineName) {
-        case 'ImportWorkflow':
-            const newUsersQueueEmpty = await isQueueEmpty(NEW_USERS_QUEUE_URL);
-            const updatesQueueEmpty = await isQueueEmpty(UPDATES_QUEUE_URL);
-            result.QueuesStartedOutEmpty = (newUsersQueueEmpty && updatesQueueEmpty);
-            break;
-        default:
-            throw new Error(`Unknown State Machine Name: ${stateMachineName}`);
+    if (stateMachineName === 'ImportWorkflow') {
+        const newUsersQueueEmpty = await isQueueEmpty(NEW_USERS_QUEUE_URL);
+        const updatesQueueEmpty = await isQueueEmpty(UPDATES_QUEUE_URL);
+        result.QueuesStartedOutEmpty = (newUsersQueueEmpty && updatesQueueEmpty);
+    } else {
+        throw new Error(`Unknown State Machine Name: ${stateMachineName}`);
     }
 
     console.log(`Result: ${JSON.stringify(result)}`);
-    return {result};
+    return { result };
 };
 
 /**

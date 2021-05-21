@@ -5,11 +5,12 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
 // 5-second timeout for API calls
 AWS.config.update({ httpOptions: { connectTimeout: 5000, timeout: 5000 } });
-const cognitoISP = new AWS.CognitoIdentityServiceProvider();
-const sqs = new AWS.SQS();
+const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
+const sqs = new AWS.SQS(getOptions());
 const { COGNITO_TPS, NEW_USERS_UPDATES_QUEUE_URL, TYPE_USER } = process.env;
 const { sleep, getExponentialBackoffTimeInMS } = require('../utils/helper-functions');
 const oneMinuteInMS = 1000 * 60;

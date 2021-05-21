@@ -5,6 +5,7 @@
  * @author Solution Builders
  */
 
+const { getOptions } = require('../utils/metrics');
 const AWS = require('aws-sdk');
 const { BACKUP_TABLE_NAME, AWS_REGION, TYPE_GROUP } = process.env;
 
@@ -35,7 +36,7 @@ exports.handler = async (event) => {
  * @param {number} exportTimestamp The timestamp for the latest export
  */
 const exportGroupName = async function exportGroupNameToBackupTable(groupName, groupDescription, groupPrecedence, groupLastModifiedDate, exportTimestamp) {
-    const docClient = new AWS.DynamoDB.DocumentClient();
+    const docClient = new AWS.DynamoDB.DocumentClient(getOptions());
     const putParams = {
         TableName: BACKUP_TABLE_NAME,
         Item: {
