@@ -1388,7 +1388,6 @@ Resources:
         - Key: solution-id-SO0126
           Value: !Sub ${StackSetConstantsCustomResource.ParentStackName}-${PrimaryRegion}
       BucketName: !Sub ${StackSetConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${AWS::Region}-logs
-      AccessControl: LogDeliveryWrite
       PublicAccessBlockConfiguration:
         BlockPublicAcls: True
         BlockPublicPolicy: True
