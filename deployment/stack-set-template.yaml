@@ -1388,7 +1388,6 @@ Resources:
         - Key: solution-id-SO0126
           Value: !Sub ${StackSetConstantsCustomResource.ParentStackName}-${PrimaryRegion}
       BucketName: !Sub ${StackSetConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${AWS::Region}-logs
-      AccessControl: LogDeliveryWrite
       PublicAccessBlockConfiguration:
         BlockPublicAcls: True
         BlockPublicPolicy: True
@@ -1398,6 +1397,43 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: aws:kms
+
+  S3ServerAccessLogsPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UserImportJobMappingFilesLogsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: S3ServerAccessLogsPolicy
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action:
+              - s3:PutObject
+            Resource:
+              Fn::Join: [
+                '', [
+                  'arn:',
+                  !Ref AWS::Partition,
+                  ':s3:::',
+                  !Ref UserImportJobMappingFilesLogsBucket,
+                  '/cupera-userimportjob*',
+                ]
+              ]
+            Condition:
+              ArnLike:
+                aws:SourceArn:
+                  - Fn::Join: [
+                    '', [
+                      'arn:',
+                      !Ref AWS::Partition,
+                      ':s3:::',
+                      !Ref UserImportJobMappingFiles
+                    ]
+                  ]
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
 
   CheckExecutionsLambda:
     Type: AWS::Lambda::Function

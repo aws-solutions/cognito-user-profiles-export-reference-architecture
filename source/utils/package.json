@@ -1,6 +1,6 @@
 {
   "name": "utils",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Custom Resource Helper functions",
   "scripts": {
     "clean": "rm -rf dist/ node_modules/ coverage/ package-lock.json",

@@ -1,6 +1,6 @@
 {
     "name": "workflow-common",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Common functionality for all Step Functions Workflows",
     "author": {
         "name": "aws-solutions-builder"
