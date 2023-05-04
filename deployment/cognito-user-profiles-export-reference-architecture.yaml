@@ -755,6 +755,7 @@ Resources:
                 Action:
                   - states:CreateStateMachine
                   - states:DeleteStateMachine
+                  - states:DescribeStateMachine
                   - states:UpdateStateMachine
                   - states:TagResource
                   - states:ListTagsForResource
@@ -792,6 +793,9 @@ Resources:
                   - s3:PutBucketAcl
                   - s3:PutBucketLogging
                   - s3:PutBucketTagging
+                  - s3:GetBucketPolicy
+                  - s3:PutBucketPolicy
+                  - s3:DeleteBucketPolicy
                 Resource:
                   - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${AWS::Region}
                   - !Sub arn:${AWS::Partition}:s3:::${SolutionConstantsCustomResource.UserImportJobMappingFileBucketPrefix}-${AWS::Region}-logs
