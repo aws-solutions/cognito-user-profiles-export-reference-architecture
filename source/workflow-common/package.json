@@ -2,15 +2,13 @@
     "name": "workflow-common",
     "version": "1.0.2",
     "description": "Common functionality for all Step Functions Workflows",
-    "author": {
-        "name": "aws-solutions-builder"
-    },
+  "author": {"name": "Amazon Web Services", "url": "https://aws.amazon.com/solutions"},
     "license": "Apache-2.0",
     "private": true,
     "dependencies": {},
     "devDependencies": {
         "aws-sdk": "^2.904.0",
-        "jest": "^26.6.3"
+        "jest": "^29.6.1"
     },
     "scripts": {
         "clean": "rm -rf dist/ node_modules/ coverage/ package-lock.json",
