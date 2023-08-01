@@ -21,7 +21,7 @@
 **/.vscode/settings.json
 **/create-stack.sh
 **/update-packages.sh
-**/package-lock.json
+
 
 # System Files
 **/.DS_Store
