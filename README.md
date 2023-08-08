@@ -22,9 +22,9 @@ For more information and a detailed deployment guide visit the [solution home pa
 ### 1. Prerequsites
 The following procedures assumes that all of the OS-level configuration has been completed. They are:
 - [AWS Command Line Interface](https://aws.amazon.com/cli/)
-- Node.js 12.x
+- Node.js 16.x
 
-The Cognito User Profiles Export Reference Architecture is developed with Node.js for the microservices that run in AWS Lambda. The latest version has been tested with Node.js 12.x.
+The Cognito User Profiles Export Reference Architecture is developed with Node.js for the microservices that run in AWS Lambda. The latest version has been tested with Node.js 16.x.
 
 ### 2. Clone the Cognito User Profiles Export Reference Architecture repository
 Clone the ```cognito-user-profiles-export-reference-architecture``` GitHub repositroy, then make the desired code changes.
