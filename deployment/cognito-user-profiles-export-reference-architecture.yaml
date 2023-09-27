@@ -66,7 +66,7 @@ Metadata:
 Mappings:
   Solution:
     Config:
-      SendAnonymousData: "Yes" # change to 'No' to disable the collection of anonymous Operational Metrics for this solution
+      SendAnonymousData: "Yes" # change to 'No' to disable the collection of anonymized Operational Metrics for this solution
       SolutionId: SO0126
       Version: VERSION_PLACEHOLDER
       S3BucketPrefix: BUCKET_NAME_PLACEHOLDER
@@ -100,6 +100,7 @@ Resources:
 
   GlobalTableCreator:
     Type: AWS::Lambda::Function
+    DependsOn: GlobalTableCreatorRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -114,7 +115,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/global-table-creator.handler"
       Role: !GetAtt GlobalTableCreatorRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 120
       MemorySize: 128
       Environment:
@@ -197,6 +198,7 @@ Resources:
 
   GlobalTableChecker:
     Type: AWS::Lambda::Function
+    DependsOn: GlobalTableCheckerRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -214,7 +216,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/global-table-checker.handler"
       Role: !GetAtt GlobalTableCheckerRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 300
       MemorySize: 128
       Environment:
@@ -352,6 +354,7 @@ Resources:
 
   StackCheckerCustomResourceLambda:
     Type: AWS::Lambda::Function
+    DependsOn: StackCheckerCustomResourceLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -369,7 +372,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/stack-checker.handler"
       Role: !GetAtt StackCheckerCustomResourceLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 120
       MemorySize: 128
       Environment:
@@ -447,6 +450,7 @@ Resources:
 
   SolutionConstantsCustomResourceLambda:
     Type: AWS::Lambda::Function
+    DependsOn: SolutionConstantsCustomResourceLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -464,7 +468,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/solution-constants.handler"
       Role: !GetAtt SolutionConstantsCustomResourceLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -510,6 +514,7 @@ Resources:
 
   StackSetManagerCustomResourceLambda:
     Type: AWS::Lambda::Function
+    DependsOn: StackSetManagerCustomResourceLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -527,7 +532,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/stackset-manager.handler"
       Role: !GetAtt StackSetManagerCustomResourceLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 300
       MemorySize: 128
       Environment:
@@ -808,6 +813,7 @@ Resources:
 
   StackSetCheckStatusLambda:
     Type: AWS::Lambda::Function
+    DependsOn: StackSetCheckStatusLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -825,7 +831,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/check-stackset-status.handler"
       Role: !GetAtt StackSetCheckStatusLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 300
       MemorySize: 128
       Environment:

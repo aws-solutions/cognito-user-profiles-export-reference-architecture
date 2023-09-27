@@ -11,20 +11,15 @@ const context = {
 };
 
 // Mock AWS SDK
-const mockCognitoISP = jest.fn();
-jest.mock('aws-sdk', () => {
-    return {
-        CognitoIdentityServiceProvider: jest.fn(() => ({
-            listGroups: mockCognitoISP
-        }))
-    };
-});
+const { mockClient } = require('aws-sdk-client-mock');
+const { CognitoIdentityProvider, ListGroupsCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const mockCognitoISP = mockClient(CognitoIdentityProvider);
 
 describe('list-groups', () => {
     const OLD_ENV = process.env;
 
     beforeEach(() => {
-        mockCognitoISP.mockReset();
+        mockCognitoISP.reset();
         process.env = { ...OLD_ENV };
         delete process.env.NODE_ENV;
         process.env.USER_POOL_ID = 'foo-user-pool-id';
@@ -44,13 +39,7 @@ describe('list-groups', () => {
             ]
         };
 
-        mockCognitoISP.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve(listGroupsResponse);
-                }
-            };
-        });
+        mockCognitoISP.on(ListGroupsCommand).resolves(listGroupsResponse);
 
         const lambda = require('../list-groups');
         const resp = await lambda.handler(event, context);
@@ -68,13 +57,7 @@ describe('list-groups', () => {
             NextToken: 'foo-next-token'
         };
 
-        mockCognitoISP.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve(listGroupsResponse);
-                }
-            };
-        });
+        mockCognitoISP.on(ListGroupsCommand).resolves(listGroupsResponse);
 
         const lambda = require('../list-groups');
         const resp = await lambda.handler(event, context);
@@ -89,13 +72,7 @@ describe('list-groups', () => {
         const listGroupsResponse = {
         };
 
-        mockCognitoISP.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve(listGroupsResponse);
-                }
-            };
-        });
+        mockCognitoISP.on(ListGroupsCommand).resolves(listGroupsResponse);
 
         const lambda = require('../list-groups');
         const resp = await lambda.handler(event, context);
@@ -115,13 +92,7 @@ describe('list-groups', () => {
             ]
         };
 
-        mockCognitoISP.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve(listGroupsResponse);
-                }
-            };
-        });
+        mockCognitoISP.on(ListGroupsCommand).resolves(listGroupsResponse);
 
         const lambda = require('../list-groups');
         const resp = await lambda.handler(event, context);

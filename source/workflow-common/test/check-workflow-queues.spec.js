@@ -6,17 +6,10 @@
  */
 
 // Mock AWS SDK
-const mockSqs = {
-    getQueueAttributes: jest.fn()
-};
 
-jest.mock('aws-sdk', () => {
-    return {
-        SQS: jest.fn(() => ({
-            getQueueAttributes: mockSqs.getQueueAttributes
-        }))
-    };
-});
+const { mockClient } = require('aws-sdk-client-mock');
+const { SQS, GetQueueAttributesCommand } = require("@aws-sdk/client-sqs");
+const mockSqs = mockClient(SQS);
 
 beforeAll(() => {
     process.env = Object.assign(process.env, {
@@ -27,37 +20,22 @@ beforeAll(() => {
 
 describe('check-workflow-queues', function () {
     beforeEach(() => {
-        jest.resetModules();
-        for (const mockFn in mockSqs) {
-            mockSqs[mockFn].mockReset();
-        }
+        mockSqs.reset();
     });
 
     it('Throws an error if a queue attribute is not zero', async function () {
-        mockSqs.getQueueAttributes.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        "Attributes": {
-                            "ApproximateNumberOfMessages": "0",
-                            "ApproximateNumberOfMessagesNotVisible": "0",
-                            "ApproximateNumberOfMessagesDelayed": "0"
-                        }
-                    });
-                }
-            };
-        }).mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        "Attributes": {
-                            "ApproximateNumberOfMessages": "0",
-                            "ApproximateNumberOfMessagesNotVisible": "0",
-                            "ApproximateNumberOfMessagesDelayed": "1"
-                        }
-                    });
-                }
-            };
+        mockSqs.on(GetQueueAttributesCommand).resolvesOnce({
+            "Attributes": {
+                "ApproximateNumberOfMessages": "0",
+                "ApproximateNumberOfMessagesNotVisible": "0",
+                "ApproximateNumberOfMessagesDelayed": "0"
+            }
+        }).resolvesOnce({
+            "Attributes": {
+                "ApproximateNumberOfMessages": "0",
+                "ApproximateNumberOfMessagesNotVisible": "0",
+                "ApproximateNumberOfMessagesDelayed": "1"
+            }
         });
 
         const event = {
@@ -92,30 +70,18 @@ describe('check-workflow-queues', function () {
     });
 
     it('Returns when all queue attributes are zero', async function () {
-        mockSqs.getQueueAttributes.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        "Attributes": {
-                            "ApproximateNumberOfMessages": "0",
-                            "ApproximateNumberOfMessagesNotVisible": "0",
-                            "ApproximateNumberOfMessagesDelayed": "0"
-                        }
-                    });
-                }
-            };
-        }).mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        "Attributes": {
-                            "ApproximateNumberOfMessages": "0",
-                            "ApproximateNumberOfMessagesNotVisible": "0",
-                            "ApproximateNumberOfMessagesDelayed": "0"
-                        }
-                    });
-                }
-            };
+        mockSqs.on(GetQueueAttributesCommand).resolvesOnce({
+            "Attributes": {
+                "ApproximateNumberOfMessages": "0",
+                "ApproximateNumberOfMessagesNotVisible": "0",
+                "ApproximateNumberOfMessagesDelayed": "0"
+            }
+        }).resolvesOnce({
+            "Attributes": {
+                "ApproximateNumberOfMessages": "0",
+                "ApproximateNumberOfMessagesNotVisible": "0",
+                "ApproximateNumberOfMessagesDelayed": "0"
+            }
         });
 
         const event = {

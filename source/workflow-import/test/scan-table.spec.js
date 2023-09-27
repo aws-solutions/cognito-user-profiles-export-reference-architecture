@@ -14,37 +14,15 @@ const context = {
 };
 
 // Mock AWS SDK
-const mockCognitoISP = {
-    getGroup: jest.fn(),
-    updateGroup: jest.fn(),
-    createGroup: jest.fn()
-};
+const { mockClient } = require('aws-sdk-client-mock');
+const { CognitoIdentityProvider, CreateGroupCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const mockCognitoISP = mockClient(CognitoIdentityProvider);
 
-const mockDocClient = {
-    scan: jest.fn()
-};
+const { SQS, SendMessageBatchCommand } = require("@aws-sdk/client-sqs");
+const mockSqs = mockClient(SQS);
 
-const mockSqs = {
-    sendMessageBatch: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        CognitoIdentityServiceProvider: jest.fn(() => ({
-            getGroup: mockCognitoISP.getGroup,
-            updateGroup: mockCognitoISP.updateGroup,
-            createGroup: mockCognitoISP.createGroup
-        })),
-        DynamoDB: {
-            DocumentClient: jest.fn(() => ({
-                scan: mockDocClient.scan
-            }))
-        },
-        SQS: jest.fn(() => ({
-            sendMessageBatch: mockSqs.sendMessageBatch
-        }))
-    };
-});
+const { DynamoDBDocumentClient, ScanCommand } = require("@aws-sdk/lib-dynamodb");
+const mockDocClient = mockClient(DynamoDBDocumentClient);
 
 beforeAll(() => {
     process.env = Object.assign(process.env, {
@@ -56,32 +34,19 @@ beforeAll(() => {
         NEW_USERS_UPDATES_QUEUE_URL: 'new-users-updates-queue'
     });
 
-    for (const mockFn in mockCognitoISP) {
-        mockCognitoISP[mockFn].mockReset();
-    }
-
-    for (const mockFn in mockDocClient) {
-        mockDocClient[mockFn].mockReset();
-    }
-
-    for (const mockFn in mockSqs) {
-        mockSqs[mockFn].mockReset();
-    }
-
     context.getRemainingTimeInMillis = function () {
         return 100000;
     }
 });
 
 describe('groups', function () {
+    beforeEach(() => {
+        mockCognitoISP.reset();
+        mockSqs.reset();
+        mockDocClient.reset();
+    })
     it('Returns Yes if no groups are returned', async function () {
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockDocClient.on(ScanCommand).resolvesOnce({});
 
         const event = {
             Context: {
@@ -100,14 +65,7 @@ describe('groups', function () {
         context.getRemainingTimeInMillis = function () {
             return 1;
         }
-
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ LastEvaluatedKey: 'another-key' });
-                }
-            };
-        });
+        mockDocClient.on(ScanCommand).resolvesOnce({ LastEvaluatedKey: 'another-key' });
 
         const event = {
             Context: {
@@ -127,19 +85,13 @@ describe('groups', function () {
             return 1;
         }
 
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Items: [
-                            {
-                                latestExportTimestamp: new Date().getTime(),
-                                type: 'timestamp-type'
-                            }
-                        ]
-                    });
+        mockDocClient.on(ScanCommand).resolvesOnce({
+            Items: [
+                {
+                    latestExportTimestamp: new Date().getTime(),
+                    type: 'timestamp-type'
                 }
-            };
+            ]
         });
 
         const event = {
@@ -156,31 +108,19 @@ describe('groups', function () {
     });
 
     it('Returns "Yes" when one group needs to be added', async function () {
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Items: [
-                            {
-                                id: 'GROUP-12345',
-                                type: 'group-type',
-                                groupName: 'group-name-2',
-                                groupDescription: 'desc-2',
-                                groupPrecedence: 1
-                            }
-                        ]
-                    });
+        mockDocClient.on(ScanCommand).resolvesOnce({
+            Items: [
+                {
+                    id: 'GROUP-12345',
+                    type: 'group-type',
+                    groupName: 'group-name-2',
+                    groupDescription: 'desc-2',
+                    groupPrecedence: 1
                 }
-            };
+            ]
         });
 
-        mockCognitoISP.createGroup.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockCognitoISP.on(CreateGroupCommand).resolvesOnce({});
 
         const event = {
             Context: {
@@ -196,35 +136,17 @@ describe('groups', function () {
     });
 
     it('Returns "Yes" a new user needs to be disabled', async function () {
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Items: [
-                            {
-                                id: 'USER-12345',
-                                type: 'user-type',
-                                userEnabled: false
-                            }
-                        ]
-                    });
+        mockDocClient.on(ScanCommand).resolvesOnce({
+            Items: [
+                {
+                    id: 'USER-12345',
+                    type: 'user-type',
+                    userEnabled: false
                 }
-            };
+            ]
         });
 
-        mockSqs.sendMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        }).mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockSqs.on(SendMessageBatchCommand).resolvesOnce({}).resolvesOnce({});
 
         const event = {
             Context: {
@@ -240,29 +162,17 @@ describe('groups', function () {
     });
 
     it('Returns "Yes" for a group membership message', async function () {
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Items: [
-                            {
-                                id: 'USER-12345',
-                                type: 'group-member:group1',
-                                userEnabled: false
-                            }
-                        ]
-                    });
+        mockDocClient.on(ScanCommand).resolvesOnce({
+            Items: [
+                {
+                    id: 'USER-12345',
+                    type: 'group-member:group1',
+                    userEnabled: false
                 }
-            };
+            ]
         });
 
-        mockSqs.sendMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockSqs.on(SendMessageBatchCommand).resolvesOnce({});
 
         const event = {
             Context: {
@@ -278,31 +188,19 @@ describe('groups', function () {
     });
 
     it('Throws an error if Cognito throws an unexpected error', async function () {
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Items: [
-                            {
-                                id: 'GROUP-12345',
-                                type: 'group-type',
-                                groupName: 'group-name-2',
-                                groupDescription: 'desc-2',
-                                groupPrecedence: 1
-                            }
-                        ]
-                    });
+        mockDocClient.on(ScanCommand).resolvesOnce({
+            Items: [
+                {
+                    id: 'GROUP-12345',
+                    type: 'group-type',
+                    groupName: 'group-name-2',
+                    groupDescription: 'desc-2',
+                    groupPrecedence: 1
                 }
-            };
+            ]
         });
 
-        mockCognitoISP.createGroup.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.reject({ code: 'UnexpectedError' });
-                }
-            };
-        });
+        mockCognitoISP.on(CreateGroupCommand).resolvesOnce({ code: 'UnexpectedError' });
 
         const event = {
             Context: {

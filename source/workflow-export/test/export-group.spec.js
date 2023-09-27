@@ -11,25 +11,13 @@ const context = {
 };
 
 // Mock AWS SDK
-const mockDocClient = {
-    put: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        DynamoDB: {
-            DocumentClient: jest.fn(() => ({
-                put: mockDocClient.put
-            }))
-        }
-    };
-});
+const { mockClient } = require('aws-sdk-client-mock');
+const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
+const mockDocClient = mockClient(DynamoDBDocumentClient);
 
 describe('export-group', () => {
     beforeEach(() => {
-        for (const mockFn in mockDocClient) {
-            mockDocClient[mockFn].mockReset();
-        }
+        mockDocClient.reset();
     });
 
     it('Should return successfully after adding group to DDB', async function () {
@@ -41,13 +29,7 @@ describe('export-group', () => {
             exportTimestamp: new Date().getTime()
         };
 
-        mockDocClient.put.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockDocClient.on(PutCommand).resolves({});
 
         const lambda = require('../export-group');
         const resp = await lambda.handler(event, context);

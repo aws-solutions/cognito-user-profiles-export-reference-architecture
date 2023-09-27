@@ -9,6 +9,14 @@
 const axios = require('axios');
 const MockAdapter = require('axios-mock-adapter');
 const axiosMock = new MockAdapter(axios);
+const {
+  DynamoDBClient, UpdateTableCommand, LimitExceededException
+} = require("@aws-sdk/client-dynamodb"),
+{
+  SFNClient: StepFunctionsClient, StartExecutionCommand, ExecutionAlreadyExists
+  
+} = require("@aws-sdk/client-sfn");
+const { mockClient } = require('aws-sdk-client-mock');
 
 // Mock axios
 axiosMock.onPut('/cfn-response').reply(200);
@@ -18,19 +26,8 @@ const context = {
   logStreamName: 'log-stream'
 };
 
-// Mock AWS SDK
-const mockDynamoDB = jest.fn();
-const mockStepFucntions = jest.fn();
-jest.mock('aws-sdk', () => {
-  return {
-    DynamoDB: jest.fn(() => ({
-      updateTable: mockDynamoDB
-    })),
-    StepFunctions: jest.fn(() => ({
-      startExecution: mockStepFucntions
-    }))
-  };
-});
+const mockDynamoDB = mockClient(DynamoDBClient);
+const mockStepFucntions = mockClient(StepFunctionsClient);
 
 describe('global-table-creator', function() {
   // Mock event data
@@ -97,29 +94,16 @@ describe('global-table-creator', function() {
   };
 
   beforeEach(() => {
-    mockDynamoDB.mockReset();
+    mockDynamoDB.reset();
+    mockStepFucntions.reset();
   });
 
   it('should return event when DynamoDB global table creation and Step Function execution succeed', async function() {
-    mockDynamoDB.mockImplementation(() => {
-      return {
-        promise() {
-          // dynamodb.updateTable
-          return Promise.resolve(updateTableResponse);
-        }
-      };
-    });
-    mockStepFucntions.mockImplementation(() => {
-      return {
-        promise() {
-          // stepFunctions.startExecution
-          return Promise.resolve({
-            executionArn: 'arn-of-step-function-execution',
-            startDate: new Date()
-          });
-        }
-      };
-    });
+    mockDynamoDB.on(UpdateTableCommand).resolves(updateTableResponse);
+    mockStepFucntions.on(StartExecutionCommand).resolves({
+      executionArn: 'arn-of-step-function-execution',
+      startDate: new Date()
+    })
 
     const index = require('../global-table-creator');
     const result = await index.handler(event, context);
@@ -128,16 +112,7 @@ describe('global-table-creator', function() {
   });
 
   it('should return failure when DynamoDB global table creation fails', async function() {
-    mockDynamoDB.mockImplementation(() => {
-      return {
-        promise() {
-          // dynamodb.updateTable
-          return Promise.reject({
-            message: 'ERROR to update the table'
-          });
-        }
-      };
-    });
+    mockDynamoDB.on(UpdateTableCommand).rejects(new LimitExceededException({ message: 'ERROR to update the table' }));
 
     const index = require('../global-table-creator');
     const result = await index.handler(event, context);
@@ -149,24 +124,8 @@ describe('global-table-creator', function() {
   });
 
   it('should return failure when Step Function start execution fails', async function() {
-    mockDynamoDB.mockImplementation(() => {
-      return {
-        promise() {
-          // dynamodb.updateTable
-          return Promise.resolve(updateTableResponse);
-        }
-      };
-    });
-    mockStepFucntions.mockImplementation(() => {
-      return {
-        promise() {
-          // stepFunctions.startExecution
-          return Promise.reject({
-            message: 'ERROR to start execution'
-          });
-        }
-      };
-    });
+    mockDynamoDB.on(UpdateTableCommand).resolves(updateTableResponse);
+    mockStepFucntions.on(StartExecutionCommand).rejects(new ExecutionAlreadyExists({ message: 'ERROR to start execution' }))
 
     const index = require('../global-table-creator');
     const result = await index.handler(event, context);

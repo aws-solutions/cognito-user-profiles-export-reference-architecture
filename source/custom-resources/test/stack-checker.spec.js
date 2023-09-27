@@ -5,6 +5,14 @@
  * @author Solution Builders
  */
 
+const { mockClient } = require('aws-sdk-client-mock');
+const {
+    CognitoIdentityProviderClient, DescribeUserPoolCommand
+} = require("@aws-sdk/client-cognito-identity-provider"),
+{
+    SSMClient, PutParameterCommand, GetParameterCommand, DeleteParameterCommand, ParameterNotFound, InternalServerError
+} = require("@aws-sdk/client-ssm");
+
 // Mock context
 const context = {
     logStreamName: 'log-stream',
@@ -13,29 +21,8 @@ const context = {
     }
 };
 
-// Mock AWS SDK
-const mockSSM = {
-    putParameter: jest.fn(),
-    getParameter: jest.fn(),
-    deleteParameter: jest.fn()
-};
-
-const mockCognitoISP = {
-    describeUserPool: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        CognitoIdentityServiceProvider: jest.fn(() => ({
-            describeUserPool: mockCognitoISP.describeUserPool
-        })),
-        SSM: jest.fn(() => ({
-            putParameter: mockSSM.putParameter,
-            getParameter: mockSSM.getParameter,
-            deleteParameter: mockSSM.deleteParameter
-        }))
-    };
-});
+const mockSSM = mockClient(SSMClient);
+const mockCognito = mockClient(CognitoIdentityProviderClient);
 
 const CustomResourceHelperFunctions = require('../../utils/custom-resource-helper-functions');
 jest.mock('../../utils/custom-resource-helper-functions');
@@ -44,13 +31,8 @@ describe('stack-checker', function () {
     beforeEach(() => {
         process.env.AWS_REGION = 'us-east-1';
         process.env.FIXED_PARAMETERS = 'SecondaryRegion,PrimaryUserPoolId,BackupTableName,AnonymousDataUUID,ParentStackName,PrimaryRegion,ImportNewUsersQueueNamePrefix,SolutionInstanceUUID,UserImportJobMappingFileBucketPrefix';
-        for (const mockFn in mockCognitoISP) {
-            mockCognitoISP[mockFn].mockReset();
-        }
-
-        for (const mockFn in mockSSM) {
-            mockSSM[mockFn].mockReset();
-        }
+        mockSSM.reset();
+        mockCognito.reset();
     });
 
     it('Create: Handles supported user pool without errors', async function () {
@@ -62,26 +44,15 @@ describe('stack-checker', function () {
             }
         };
 
-        mockCognitoISP.describeUserPool.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        UserPool: {
-                            MfaConfiguration: 'OFF',
-                            UsernameAttributes: ['email']
-                        }
-                    });
-                }
-            };
-        });
+        mockCognito.on(DescribeUserPoolCommand).resolvesOnce({
+            UserPool: {
+                MfaConfiguration: 'OFF',
+                UsernameAttributes: ['email']
+            }
+        })
 
-        mockSSM.putParameter.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockSSM.on(PutParameterCommand).resolvesOnce({});
+        
 
         CustomResourceHelperFunctions.handler.mockImplementationOnce(async (evt, ctx, handleCreate) => {
             return await handleCreate(evt);
@@ -122,18 +93,12 @@ describe('stack-checker', function () {
             }
         };
 
-        mockCognitoISP.describeUserPool.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        UserPool: {
-                            MfaConfiguration: 'OPTIONAL',
-                            UsernameAttributes: ['email']
-                        }
-                    });
-                }
-            };
-        });
+        mockCognito.on(DescribeUserPoolCommand).resolvesOnce({
+            UserPool: {
+                MfaConfiguration: 'OPTIONAL',
+                UsernameAttributes: ['email']
+            }
+        })
 
 
         CustomResourceHelperFunctions.handler.mockImplementationOnce(async (evt, ctx, handleCreate) => {
@@ -155,18 +120,12 @@ describe('stack-checker', function () {
             }
         };
 
-        mockCognitoISP.describeUserPool.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        UserPool: {
-                            MfaConfiguration: 'OFF',
-                            UsernameAttributes: ['email', 'phone_number']
-                        }
-                    });
-                }
-            };
-        });
+        mockCognito.on(DescribeUserPoolCommand).resolvesOnce({
+            UserPool: {
+                MfaConfiguration: 'OFF',
+                UsernameAttributes: ['email', 'phone_number']
+            }
+        })
 
 
         CustomResourceHelperFunctions.handler.mockImplementationOnce(async (evt, ctx, handleCreate) => {
@@ -189,19 +148,13 @@ describe('stack-checker', function () {
             }
         };
 
-        mockSSM.getParameter.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Parameter: {
-                            Value: JSON.stringify({
-                                PrimaryUserPoolId: 'primary-user-pool-id',
-                                SecondaryRegion: 'us-east-1'
-                            })
-                        }
-                    });
-                }
-            };
+        mockSSM.on(GetParameterCommand).resolvesOnce({
+            Parameter: {
+                Value: JSON.stringify({
+                    PrimaryUserPoolId: 'primary-user-pool-id',
+                    SecondaryRegion: 'us-east-1'
+                })
+            }
         });
 
         CustomResourceHelperFunctions.handler.mockImplementationOnce(async (evt, ctx, handleCreate, handleUpdate) => {
@@ -221,19 +174,13 @@ describe('stack-checker', function () {
             }
         };
 
-        mockSSM.getParameter.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Parameter: {
-                            Value: JSON.stringify({
-                                PrimaryUserPoolId: 'original-user-pool-id',
-                                SecondaryRegion: 'us-east-1'
-                            })
-                        }
-                    });
-                }
-            };
+        mockSSM.on(GetParameterCommand).resolvesOnce({
+            Parameter: {
+                Value: JSON.stringify({
+                    PrimaryUserPoolId: 'original-user-pool-id',
+                    SecondaryRegion: 'us-east-1'
+                })
+            }
         });
 
         CustomResourceHelperFunctions.handler.mockImplementationOnce(async (evt, ctx, handleCreate, handleUpdate) => {
@@ -258,13 +205,7 @@ describe('stack-checker', function () {
             }
         };
 
-        mockSSM.deleteParameter.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockSSM.on(DeleteParameterCommand).resolvesOnce({});
 
         CustomResourceHelperFunctions.handler.mockImplementationOnce(async (evt, ctx, handleCreate, handleUpdate, handleDelete) => {
             return await handleDelete(evt);
@@ -283,13 +224,7 @@ describe('stack-checker', function () {
             }
         };
 
-        mockSSM.deleteParameter.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.reject({ code: 'ParameterNotFound' });
-                }
-            };
-        });
+        mockSSM.on(DeleteParameterCommand).rejectsOnce(new ParameterNotFound());
 
         CustomResourceHelperFunctions.handler.mockImplementationOnce(async (evt, ctx, handleCreate, handleUpdate, handleDelete) => {
             return await handleDelete(evt);
@@ -308,13 +243,7 @@ describe('stack-checker', function () {
             }
         };
 
-        mockSSM.deleteParameter.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.reject({ code: 'UnexpectedError' });
-                }
-            };
-        });
+        mockSSM.on(DeleteParameterCommand).rejectsOnce(new InternalServerError({message: 'test error'}));
 
         CustomResourceHelperFunctions.handler.mockImplementationOnce(async (evt, ctx, handleCreate, handleUpdate, handleDelete) => {
             return await handleDelete(evt);
@@ -324,7 +253,7 @@ describe('stack-checker', function () {
         try {
             await lambda.handler(event, context);
         } catch (err) {
-            expect(err.code).toBe('UnexpectedError');
+            expect(err.name).toBe('InternalServerError');
         }
     });
 });

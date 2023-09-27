@@ -9,8 +9,10 @@ const { USER_POOL_TABLE, SECONDARY_REGION } = process.env;
 const ONE_MINUTE = 60 * 1000;
 const { getOptions } = require('../utils/metrics');
 
-const AWS = require('aws-sdk');
-const dynamodb = new AWS.DynamoDB(getOptions({ region: SECONDARY_REGION }));
+const {
+  DynamoDB
+} = require("@aws-sdk/client-dynamodb");
+const dynamodb = new DynamoDB(getOptions({ region: SECONDARY_REGION }));
 const axios = require('axios');
 
 /**
@@ -34,7 +36,7 @@ exports.handler = async (event, context) => {
       output.LatestStreamArn = await getSecondaryLastestStreamArn();
     } catch (error) {
       // If the table is not created yet, continue after a sleep.
-      if (error.code === 'ResourceNotFoundException') {
+      if (error.name === 'ResourceNotFoundException') {
         await sleep(1);
         continue;
       } else {
@@ -69,7 +71,7 @@ exports.handler = async (event, context) => {
 async function getSecondaryLastestStreamArn() {
   const response = await dynamodb.describeTable({
     TableName: USER_POOL_TABLE
-  }).promise();
+  });
 
   return response.Table.LatestStreamArn ? response.Table.LatestStreamArn : '';
 }

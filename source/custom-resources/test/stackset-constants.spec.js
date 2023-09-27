@@ -5,6 +5,12 @@
  * @author Solution Builders
  */
 
+const {
+    SSMClient, GetParameterCommand
+} = require("@aws-sdk/client-ssm");
+
+const { mockClient } = require('aws-sdk-client-mock');
+
 // Mock context
 const context = {
     logStreamName: 'log-stream',
@@ -19,17 +25,7 @@ const MockAdapter = require('axios-mock-adapter');
 let axiosMock = new MockAdapter(axios);
 
 // Mock AWS SDK
-const mockSSM = {
-    getParameter: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        SSM: jest.fn(() => ({
-            getParameter: mockSSM.getParameter
-        }))
-    };
-});
+const mockSSM = mockClient(SSMClient);
 
 const CustomResourceHelperFunctions = require('../../utils/custom-resource-helper-functions');
 jest.mock('../../utils/custom-resource-helper-functions');
@@ -38,9 +34,7 @@ describe('stackset-manager', function () {
     beforeEach(() => {
         process.env.AWS_REGION = 'us-east-1';
         process.env.STATE_MACHINE_ARN = 'state-machine-arn';
-        for (const mockFn in mockSSM) {
-            mockSSM[mockFn].mockReset();
-        }
+        mockSSM.reset();
         axiosMock = new MockAdapter(axios);
     });
 
@@ -62,19 +56,13 @@ describe('stackset-manager', function () {
             }
         };
 
-        mockSSM.getParameter.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Parameter: {
-                            Value: JSON.stringify({
-                                PrimaryUserPoolId: 'primary-user-pool-id',
-                                SecondaryRegion: 'us-east-1'
-                            })
-                        }
-                    });
-                }
-            };
+        mockSSM.on(GetParameterCommand).resolvesOnce({
+            Parameter: {
+                Value: JSON.stringify({
+                    PrimaryUserPoolId: 'primary-user-pool-id',
+                    SecondaryRegion: 'us-east-1'
+                })
+            }
         });
 
         CustomResourceHelperFunctions.handler.mockImplementationOnce(async (evt, ctx, handleCreate) => {

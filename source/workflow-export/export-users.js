@@ -7,15 +7,35 @@
 
 const { getOptions } = require('../utils/metrics');
 
-const AWS = require('aws-sdk');
-const DynamoDB = require('aws-sdk/clients/dynamodb');
-const cognitoIdentityServiceProvider = new AWS.CognitoIdentityServiceProvider(getOptions());
-const documentClient = new DynamoDB.DocumentClient(getOptions());
+const {
+        CognitoIdentityProvider: CognitoIdentityServiceProvider
+      } = require("@aws-sdk/client-cognito-identity-provider"),
+      {
+        DynamoDBClient
+      } = require("@aws-sdk/client-dynamodb"),
+      { 
+        DynamoDBDocumentClient, BatchWriteCommand 
+      } = require("@aws-sdk/lib-dynamodb");
+const cognitoIdentityServiceProvider = new CognitoIdentityServiceProvider(getOptions());
+const dynamodbClient = new DynamoDBClient(getOptions());
+const documentClient = DynamoDBDocumentClient.from(dynamodbClient);
+
 
 const { AWS_REGION, USER_POOL_ID, TABLE_NAME, COGNITO_TPS, TYPE_USER } = process.env;
 const ONE_MINUTE = 60 * 1000;
 const { sleep, getExponentialBackoffTimeInMS } = require('../utils/helper-functions');
 let poolUsernameAttributes = [];
+
+
+async function waitCallLimit(paginationToken, cognitoApiCallCount, cognitoTPS, currentTime, oneSecondFromNow){
+  if (paginationToken && (cognitoApiCallCount >= cognitoTPS) && (currentTime < oneSecondFromNow)) {
+    const waitTime = (oneSecondFromNow - currentTime);
+    console.log(`Cognito transactions per second limit (${cognitoTPS}) reached. Waiting for ${(oneSecondFromNow - currentTime)}ms before proceeding`);
+    await sleep(0, waitTime);
+  }
+}
+
+
 
 /**
  * Exports user profiles to the backup table
@@ -34,13 +54,12 @@ exports.handler = async (event, context) => {
     ExportTimestamp: -1
   };
 
+  output.ExportTimestamp = new Date().getTime();
   if (event.paginationToken) {
     // This function was invoked a subsequent time within an execution of the ExportWorkflow
     // Retrieve the ExportTimestamp from the event instead of creating a new value
     output.paginationToken = event.paginationToken;
     output.ExportTimestamp = event.ExportTimestamp;
-  } else {
-    output.ExportTimestamp = new Date().getTime();
   }
 
   if (event.UsernameAttributes) {
@@ -51,7 +70,7 @@ exports.handler = async (event, context) => {
     let totalUserProcessedCount = 0;
     let paginationToken = null;
 
-    if (output.paginationToken && output.paginationToken !== '') {
+    if (output.paginationToken !== '') {
       paginationToken = output.paginationToken;
     }
 
@@ -64,7 +83,7 @@ exports.handler = async (event, context) => {
         const cognitoResult = await listCognitoUsers(paginationToken, context);
         cognitoApiCallCount++;
 
-        if (cognitoResult.users && cognitoResult.users.length > 0) {
+        if (cognitoResult.users?.length > 0) {
           console.log(`Retrieved ${cognitoResult.users.length} user(s)`);
           totalUserProcessedCount += cognitoResult.users.length;
           const batchWriteUsersResponse = await batchWriteUsers(cognitoResult.users, output.ExportTimestamp, cognitoTPS, oneSecondFromNow, cognitoApiCallCount);
@@ -78,11 +97,8 @@ exports.handler = async (event, context) => {
         currentTime = new Date().getTime();
       } while (paginationToken && (cognitoApiCallCount < cognitoTPS) && (currentTime < oneSecondFromNow) && (context.getRemainingTimeInMillis() > ONE_MINUTE));
 
-      if (paginationToken && (cognitoApiCallCount >= cognitoTPS) && (currentTime < oneSecondFromNow)) {
-        const waitTime = (oneSecondFromNow - currentTime);
-        console.log(`Cognito transactions per second limit (${cognitoTPS}) reached. Waiting for ${(oneSecondFromNow - currentTime)}ms before proceeding`);
-        await sleep(0, waitTime);
-      }
+      await waitCallLimit(paginationToken, cognitoApiCallCount, cognitoTPS, currentTime, oneSecondFromNow)
+
     } while (paginationToken && context.getRemainingTimeInMillis() > ONE_MINUTE);
 
     console.log(`Successfully processed ${totalUserProcessedCount} user(s)`);
@@ -121,7 +137,7 @@ async function listCognitoUsers(paginationToken, context) {
       }
 
       console.log(`Listing users: ${JSON.stringify(listUsersParams)}`);
-      cognitoResponse = await cognitoIdentityServiceProvider.listUsers(listUsersParams).promise();
+      cognitoResponse = await cognitoIdentityServiceProvider.listUsers(listUsersParams);
     } catch (err) {
       console.error(err);
 
@@ -149,6 +165,36 @@ async function listCognitoUsers(paginationToken, context) {
   };
 }
 
+async function getRequestItems(batchWriteParams){
+  let batchResult;
+  do {
+    console.log(`Writing ${batchWriteParams.RequestItems[TABLE_NAME].length} item(s) to ${TABLE_NAME}`);
+    batchResult = await documentClient.send(new BatchWriteCommand(batchWriteParams));
+
+    if (batchResult.UnprocessedItems[TABLE_NAME]?.length > 0) {
+      console.log(`Detected ${batchResult.UnprocessedItems[TABLE_NAME].length} unprocessed item(s). Waiting 100 ms then processing again`);
+      batchWriteParams.RequestItems[TABLE_NAME] = batchResult.UnprocessedItems[TABLE_NAME];
+      await sleep(0, 100, false);
+    }
+  } while (batchResult.UnprocessedItems[TABLE_NAME]?.length > 0);
+}
+
+function getPseudoUsername(poolUsernameAttributes, user){
+  let pseudoUsername;
+  if (poolUsernameAttributes.length === 0) {
+    pseudoUsername = user.Username;
+  } else if (poolUsernameAttributes.length === 1) {
+    const pseudoUsernameAttribute = user.Attributes.find(attr => attr.Name === poolUsernameAttributes[0]);
+    pseudoUsername = pseudoUsernameAttribute.Value;
+  } else {
+    // Narrow down which attribute to use as pseudoUsername
+    const possibleAttributes = user.Attributes.filter(attr => poolUsernameAttributes.includes(attr.Name) && attr.Value.trim() !== '');
+    if (possibleAttributes.length === 1) {
+      pseudoUsername = possibleAttributes[0].Value;
+    }
+  }
+  return pseudoUsername;
+}
 /**
  * Batch write users into DynamoDB table.
  * @param {AWS.CognitoIdentityServiceProvider.UsersListType} users - An array of Cognito users
@@ -168,8 +214,7 @@ async function batchWriteUsers(users, userLastConfirmedInUserPoolDate, cognitoTP
 
       let usersToWrite = users.splice(0, batchWriteMax);
 
-      for (let i = 0; i < usersToWrite.length; i++) {
-        let user = usersToWrite[i];
+      for (const user of usersToWrite) {
 
         let subValue;
         const subAttribute = user.Attributes.find(attr => attr.Name === 'sub');
@@ -183,19 +228,7 @@ async function batchWriteUsers(users, userLastConfirmedInUserPoolDate, cognitoTP
 
         // The pseudoUsername  will be used as the username for the user import
         // CSV when importing users during the import workflow
-        let pseudoUsername;
-        if (poolUsernameAttributes.length === 0) {
-          pseudoUsername = user.Username;
-        } else if (poolUsernameAttributes.length === 1) {
-          const pseudoUsernameAttribute = user.Attributes.find(attr => attr.Name === poolUsernameAttributes[0]);
-          pseudoUsername = pseudoUsernameAttribute.Value;
-        } else {
-          // Narrow down which attribute to use as pseudoUsername
-          const possibleAttributes = user.Attributes.filter(attr => poolUsernameAttributes.includes(attr.Name) && attr.Value.trim() !== '');
-          if (possibleAttributes.length === 1) {
-            pseudoUsername = possibleAttributes[0].Value;
-          }
-        }
+        let pseudoUsername = getPseudoUsername(poolUsernameAttributes, user);
 
         if (!pseudoUsername) {
           throw new Error('Unable to determine the pseudoUsername for the user');
@@ -217,18 +250,7 @@ async function batchWriteUsers(users, userLastConfirmedInUserPoolDate, cognitoTP
           }
         });
       }
-
-      let batchResult;
-      do {
-        console.log(`Writing ${batchWriteParams.RequestItems[TABLE_NAME].length} item(s) to ${TABLE_NAME}`);
-        batchResult = await documentClient.batchWrite(batchWriteParams).promise();
-
-        if (batchResult.UnprocessedItems[TABLE_NAME] !== undefined && batchResult.UnprocessedItems[TABLE_NAME].length > 0) {
-          console.log(`Detected ${batchResult.UnprocessedItems[TABLE_NAME].length} unprocessed item(s). Waiting 100 ms then processing again`);
-          batchWriteParams.RequestItems[TABLE_NAME] = batchResult.UnprocessedItems[TABLE_NAME];
-          await sleep(0, 100, false);
-        }
-      } while (batchResult.UnprocessedItems[TABLE_NAME] !== undefined && batchResult.UnprocessedItems[TABLE_NAME].length > 0);
+      await getRequestItems(batchWriteParams);
     }
   } catch (error) {
     console.error('Error occurred while batch writing items into dynamodb.');

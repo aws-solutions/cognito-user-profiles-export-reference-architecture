@@ -7,8 +7,10 @@
 
 const { getOptions } = require('../utils/metrics');
 
-const AWS = require('aws-sdk');
-const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
+const {
+    CognitoIdentityProvider: CognitoIdentityServiceProvider
+} = require("@aws-sdk/client-cognito-identity-provider");
+const cognitoISP = new CognitoIdentityServiceProvider(getOptions());
 const { sleep } = require('../utils/helper-functions');
 
 /**
@@ -33,8 +35,7 @@ exports.handler = async (event) => {
     try {
         const listUsersParams = { UserPoolId: newUserPoolId };
         console.log(`Listing users in new pool: ${JSON.stringify(listUsersParams)}`);
-        const listUsersResponse = await cognitoISP.listUsers(listUsersParams).promise();
-
+        const listUsersResponse = await cognitoISP.listUsers(listUsersParams);
         if (listUsersResponse.Users && listUsersResponse.Users.length > 0) {
             throw new Error(`Found at least ${listUsersResponse.Users.length} user(s) in the new user pool`);
         }
@@ -43,8 +44,7 @@ exports.handler = async (event) => {
 
         const listGroupsParams = { UserPoolId: newUserPoolId };
         console.log(`Listing groups in new pool: ${JSON.stringify(listGroupsParams)}`);
-        const listGroupsResponse = await cognitoISP.listGroups(listGroupsParams).promise();
-
+        const listGroupsResponse = await cognitoISP.listGroups(listGroupsParams);
         if (listGroupsResponse.Groups && listGroupsResponse.Groups.length > 0) {
             throw new Error(`Found at least ${listGroupsResponse.Groups.length} group(s) in the new user pool`);
         }

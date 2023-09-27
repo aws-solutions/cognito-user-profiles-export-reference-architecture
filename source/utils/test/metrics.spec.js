@@ -65,9 +65,8 @@ describe('utils/getOptions', () => {
         expect.assertions(1);
 
         const optionsResp = getOptions();
-
         expect(optionsResp).toEqual({
-            customUserAgent: 'AwsSolution/SOMOCK/v1.0.0'
+            customUserAgent: [['AWSSOLUTION/SOMOCK','v1.0.0']]
         });
     });
 
@@ -77,7 +76,7 @@ describe('utils/getOptions', () => {
         const optionsResp = getOptions({ region: process.env.AWS_REGION });
 
         expect(optionsResp).toEqual({
-            customUserAgent: 'AwsSolution/SOMOCK/v1.0.0',
+            customUserAgent: [['AWSSOLUTION/SOMOCK','v1.0.0']],
             region: 'us-east-1'
         });
     });
@@ -88,7 +87,7 @@ describe('utils/getOptions', () => {
         const optionsResp = getOptions({});
 
         expect(optionsResp).toEqual({
-            customUserAgent: 'AwsSolution/SOMOCK/v1.0.0'
+            customUserAgent: [['AWSSOLUTION/SOMOCK','v1.0.0']]
         });
     });
 
@@ -96,12 +95,12 @@ describe('utils/getOptions', () => {
         expect.assertions(1);
 
         const optionsResp = getOptions({
-            customUserAgent: 'Previous/User/Agent',
+            customUserAgent: [['Previous/User','Agent']],
             region: process.env.AWS_REGION
         });
 
         expect(optionsResp).toEqual({
-            customUserAgent: 'Previous/User/Agent',
+            customUserAgent: [['Previous/User','Agent']],
             region: 'us-east-1'
         });
     });
