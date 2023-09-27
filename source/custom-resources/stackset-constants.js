@@ -7,7 +7,9 @@
 
 const { getOptions } = require('../utils/metrics');
 const CustomResourceHelperFunctions = require('../utils/custom-resource-helper-functions');
-const AWS = require('aws-sdk');
+const {
+ SSM
+} = require("@aws-sdk/client-ssm");
 
 /**
  * Retrieves solutions constants from SSM parameter store so they can be used within the StackSet instance
@@ -22,12 +24,12 @@ exports.handler = async (event, context) => {
  */
 const handleCreate = async function handleCreate(event) {
     const { ParentStackName, PrimaryRegion } = event.ResourceProperties;
-    const ssm = new AWS.SSM(getOptions({ region: PrimaryRegion }));
+    const ssm = new SSM(getOptions({ region: PrimaryRegion }));
     const ssmParameterName = `/${ParentStackName}-${PrimaryRegion}/fixed-solution-parameters`;
     const getParams = { Name: ssmParameterName };
 
     console.log(`Getting parameter: ${JSON.stringify(getParams)}`);
-    const getResponse = await ssm.getParameter(getParams).promise();
+    const getResponse = await ssm.getParameter(getParams);
     console.log(`Get response: ${JSON.stringify(getResponse)}`);
 
     const parametersFromSSM = JSON.parse(getResponse.Parameter.Value);

@@ -6,26 +6,18 @@
  */
 
 // Mock AWS SDK
-const mockSns = {
+const { SNS } = require("@aws-sdk/client-sns");
+const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
+jest.genMockFromModule("@aws-sdk/client-sns");
+jest.mock("@aws-sdk/client-sns");
+const mSns = {
     publish: jest.fn()
 };
+SNS.mockImplementation(() => mSns);
+const mockSns = new SNS();
 
-const mockDocClient = {
-    put: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        SNS: jest.fn(() => ({
-            publish: mockSns.publish
-        })),
-        DynamoDB: {
-            DocumentClient: jest.fn(() => ({
-                put: mockDocClient.put
-            }))
-        }
-    };
-});
+const { mockClient } = require('aws-sdk-client-mock');
+const mockDocClient = mockClient(DynamoDBDocumentClient);
 
 // Mock metrics client
 const Metrics = require('../../utils/metrics');
@@ -48,31 +40,19 @@ beforeAll(() => {
 
 describe('workflow-message-broker', function () {
     beforeEach(() => {
-        jest.resetModules();
         for (const mockFn in mockSns) {
             mockSns[mockFn].mockReset();
         }
-
-        for (const mockFn in mockDocClient) {
-            mockDocClient[mockFn].mockReset();
-        }
+        mockDocClient.reset();
     });
 
     it('Handles an error and publishes to SNS', async function () {
         mockSns.publish.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+            return Promise.resolve({});
         });
 
         Metrics.sendAnonymousMetric.mockImplementationOnce(async (x, y, z) => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+            return Promise.resolve({});
         });
 
         const errorCause = { message: 'error-message' };
@@ -95,27 +75,13 @@ describe('workflow-message-broker', function () {
 
     it('Handles a cleanup request and publishes to SNS', async function () {
         mockSns.publish.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+            return Promise.resolve({});
         });
 
-        mockDocClient.put.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockDocClient.on(PutCommand).resolves({});
 
         Metrics.sendAnonymousMetric.mockImplementationOnce(async (x, y, z) => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+            return Promise.resolve({});
         });
 
         const event = {
@@ -134,7 +100,7 @@ describe('workflow-message-broker', function () {
             Message: `Workflow (ExportWorkflow-HASH) completed successfully. Execution took 1 second(s).\n\nExecution details:\n${JSON.stringify(event.Context, null, 2)}`
         });
 
-        expect(mockDocClient.put.mock.calls[0][0]).toEqual({
+        expect(mockDocClient.call(0).args[0].input).toEqual({
             TableName: 'table-name',
             Item: {
                 id: 'latest-export-timestamp',
@@ -159,19 +125,11 @@ describe('workflow-message-broker', function () {
 
     it('Handles an error and publishes to SNS when an error object is not passed', async function () {
         mockSns.publish.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+            return Promise.resolve({});
         });
 
         Metrics.sendAnonymousMetric.mockImplementationOnce(async (x, y, z) => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+            return Promise.resolve({});
         });
 
         const event = {
@@ -193,19 +151,11 @@ describe('workflow-message-broker', function () {
 
     it('Handles an error and publishes to SNS when a string is passed as the error cause', async function () {
         mockSns.publish.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+            return Promise.resolve({});
         });
 
         Metrics.sendAnonymousMetric.mockImplementationOnce(async (x, y, z) => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+            return Promise.resolve({});
         });
 
         const event = {

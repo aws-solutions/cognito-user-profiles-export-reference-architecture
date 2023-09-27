@@ -7,9 +7,12 @@
 
 const { getOptions } = require('../utils/metrics');
 
-const AWS = require('aws-sdk');
-const ssm = new AWS.SSM(getOptions());
-const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
+const { CognitoIdentityProviderClient, DescribeUserPoolCommand } = require("@aws-sdk/client-cognito-identity-provider"),
+      {
+          SSM
+      } = require("@aws-sdk/client-ssm");
+const ssm = new SSM(getOptions());
+const cognitoClient = new CognitoIdentityProviderClient(getOptions());
 const CustomResourceHelperFunctions = require('../utils/custom-resource-helper-functions');
 const { AWS_REGION, FIXED_PARAMETERS } = process.env;
 const fixedParameters = FIXED_PARAMETERS.split(',');
@@ -46,7 +49,7 @@ const handleCreate = async function putSSMParameters(event) {
     };
 
     console.log(`Putting parameter: ${JSON.stringify(putParams)}`);
-    const putResponse = await ssm.putParameter(putParams).promise();
+    const putResponse = await ssm.putParameter(putParams);
     console.log(`Put response: ${JSON.stringify(putResponse)}`);
 };
 
@@ -60,7 +63,7 @@ const handleUpdate = async function checkCurrentPropertiesAgainstSSM(event) {
     const getParams = { Name: ssmParameterName };
 
     console.log(`Getting parameter: ${JSON.stringify(getParams)}`);
-    const getResponse = await ssm.getParameter(getParams).promise();
+    const getResponse = await ssm.getParameter(getParams);
     console.log(`Get response: ${JSON.stringify(getResponse)}`);
 
     const parametersFromSSM = JSON.parse(getResponse.Parameter.Value);
@@ -86,10 +89,10 @@ const handleDelete = async function deleteSSMParameters(event) {
     try {
         const deleteParams = { Name: ssmParameterName };
         console.log(`Deleting parameters: ${JSON.stringify(deleteParams)}`);
-        const deleteResponse = await ssm.deleteParameter(deleteParams).promise();
+        const deleteResponse = await ssm.deleteParameter(deleteParams);
         console.log(`Delete response: ${JSON.stringify(deleteResponse)}`);
     } catch (err) {
-        if (err.code === 'ParameterNotFound') {
+        if (err.name === 'ParameterNotFound') {
             console.log(`Parameter ${ssmParameterName} is not present in SSM`);
         } else {
             throw err;
@@ -104,7 +107,7 @@ const handleDelete = async function deleteSSMParameters(event) {
 const checkUserPoolConfig = async (UserPoolId) => {
     const describeUserPoolParams = { UserPoolId };
     console.log(`Describing user pool: ${JSON.stringify(describeUserPoolParams)}`);
-    const describeUserPoolResponse = await cognitoISP.describeUserPool(describeUserPoolParams).promise();
+    const describeUserPoolResponse = await cognitoClient.send(new DescribeUserPoolCommand(describeUserPoolParams));
     console.log(`Describe user pool response: ${JSON.stringify(describeUserPoolResponse, null, 2)}`);
 
     if (describeUserPoolResponse.UserPool.MfaConfiguration && describeUserPoolResponse.UserPool.MfaConfiguration !== 'OFF') {

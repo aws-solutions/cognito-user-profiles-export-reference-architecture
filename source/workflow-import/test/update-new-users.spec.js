@@ -6,59 +6,12 @@
  */
 
 // Mock AWS SDK
-const mockCognitoISP = {
-    getCSVHeader: jest.fn(),
-    createUserImportJob: jest.fn(),
-    startUserImportJob: jest.fn(),
-    describeUserImportJob: jest.fn(),
-    adminAddUserToGroup: jest.fn(),
-    adminDisableUser: jest.fn()
-};
+const { mockClient } = require('aws-sdk-client-mock');
+const { CognitoIdentityProvider, AdminAddUserToGroupCommand, AdminDisableUserCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const mockCognitoISP = mockClient(CognitoIdentityProvider);
 
-const mockDocClient = {
-    scan: jest.fn()
-};
-
-const mockSqs = {
-    sendMessageBatch: jest.fn(),
-    receiveMessage: jest.fn(),
-    deleteMessageBatch: jest.fn()
-};
-
-const mockS3 = {
-    scan: jest.fn(),
-    putObject: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        CognitoIdentityServiceProvider: jest.fn(() => ({
-            getCSVHeader: mockCognitoISP.getCSVHeader,
-            createUserImportJob: mockCognitoISP.createUserImportJob,
-            startUserImportJob: mockCognitoISP.startUserImportJob,
-            describeUserImportJob: mockCognitoISP.describeUserImportJob,
-            adminAddUserToGroup: mockCognitoISP.adminAddUserToGroup,
-            adminDisableUser: mockCognitoISP.adminDisableUser
-        })),
-        DynamoDB: {
-            DocumentClient: jest.fn(() => ({
-                scan: mockDocClient.scan
-            }))
-        },
-        SQS: jest.fn(() => ({
-            sendMessageBatch: mockSqs.sendMessageBatch,
-            receiveMessage: mockSqs.receiveMessage,
-            deleteMessageBatch: mockSqs.deleteMessageBatch
-        })),
-        S3: jest.fn(() => ({
-            scan: mockS3.scan,
-            putObject: mockS3.putObject
-        })),
-        config: {
-            update: jest.fn()
-        }
-    };
-});
+const { SQS, ReceiveMessageCommand, DeleteMessageBatchCommand } = require("@aws-sdk/client-sqs");
+const mockSqs = mockClient(SQS);
 
 // Mock Axios
 const axios = require('axios');
@@ -69,6 +22,10 @@ axiosMock.onPut('/pre-signed-url').reply(200);
 // Mock metrics client
 const Metrics = require('../../utils/metrics');
 jest.mock('../../utils/metrics');
+
+// Mock helper client
+const helper = require('../../utils/helper-functions');
+jest.mock('../../utils/helper-functions');
 
 // Mock context
 const context = {
@@ -92,29 +49,15 @@ beforeAll(() => {
         TYPE_USER: 'user-type',
         TYPE_GROUP: 'group-type'
     });
-
-    for (const mockFn in mockCognitoISP) {
-        mockCognitoISP[mockFn].mockReset();
-    }
-
-    for (const mockFn in mockDocClient) {
-        mockDocClient[mockFn].mockReset();
-    }
-
-    for (const mockFn in mockSqs) {
-        mockSqs[mockFn].mockReset();
-    }
 });
 
 describe('import-new-users: UpdateNewUsers', function () {
+    beforeEach(() => {
+        mockCognitoISP.reset();
+        mockSqs.reset();
+    })
     it('Returns when no messages are returned from the Queue', async function () {
-        mockSqs.receiveMessage.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ Messages: [] });
-                }
-            };
-        });
+        mockSqs.on(ReceiveMessageCommand).resolvesOnce({ Messages: [] });
 
         const event = {
             Context: {
@@ -133,52 +76,26 @@ describe('import-new-users: UpdateNewUsers', function () {
     });
 
     it('Returns when a user was added but no groups to add', async function () {
-        mockSqs.receiveMessage.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: [
-                            {
-                                Body: JSON.stringify({
-                                    id: 'row-id',
-                                    type: 'user : uuid',
-                                    username: 'test-user',
-                                    userAttributes: [{
-                                        Name: 'sub',
-                                        Value: 'uuid'
-                                    }],
-                                    userEnabled: false
-                                })
-                            }
-                        ]
-                    });
+        mockSqs.on(ReceiveMessageCommand).resolvesOnce({
+            Messages: [
+                {
+                    Body: JSON.stringify({
+                        id: 'row-id',
+                        type: 'user : uuid',
+                        username: 'test-user',
+                        userAttributes: [{
+                            Name: 'sub',
+                            Value: 'uuid'
+                        }],
+                        userEnabled: false
+                    })
                 }
-            };
-        }).mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: []
-                    });
-                }
-            };
-        });
+            ]
+        }).resolvesOnce({ Messages: [] });
 
-        mockCognitoISP.adminAddUserToGroup.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockCognitoISP.on(AdminAddUserToGroupCommand).resolvesOnce({});
 
-        mockSqs.deleteMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockSqs.on(DeleteMessageBatchCommand).resolvesOnce({});
 
         const event = {
             Context: {
@@ -197,65 +114,27 @@ describe('import-new-users: UpdateNewUsers', function () {
     });
 
     it('Returns when a user was added and a group needs to be added', async function () {
-        mockSqs.receiveMessage.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: [
-                            {
-                                Body: JSON.stringify({
-                                    id: 'row-id',
-                                    type: 'user : uuid',
-                                    username: 'test-user',
-                                    userAttributes: [{
-                                        Name: 'sub',
-                                        Value: 'uuid'
-                                    }],
-                                    userEnabled: true
-                                })
-                            }
-                        ]
-                    });
-                }
-            };
-        }).mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: []
-                    });
-                }
-            };
-        });
+        mockSqs.on(ReceiveMessageCommand).resolvesOnce({
+                Messages: [
+                    {
+                        Body: JSON.stringify({
+                            id: 'row-id',
+                            type: 'user : uuid',
+                            username: 'test-user',
+                            userAttributes: [{
+                                Name: 'sub',
+                                Value: 'uuid'
+                            }],
+                            userEnabled: true
+                        })
+                    }
+                ]
+            
+            }).resolvesOnce({Messages: []});
 
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Items: [{
-                            id: 'group-name:group',
-                            GroupName: 'group-name'
-                        }]
-                    });
-                }
-            };
-        });
+        mockSqs.on(DeleteMessageBatchCommand).resolvesOnce({});
 
-        mockSqs.deleteMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
-
-        mockCognitoISP.adminAddUserToGroup.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockCognitoISP.on(AdminAddUserToGroupCommand).resolvesOnce({});
 
         const event = {
             Context: {
@@ -274,51 +153,33 @@ describe('import-new-users: UpdateNewUsers', function () {
     });
 
     it('Returns when a user was added and then needs to be disabled', async function () {
-        mockSqs.receiveMessage.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: [
-                            {
-                                Body: JSON.stringify({
-                                    id: 'row-id',
-                                    type: 'user-type',
-                                    username: 'test-user',
-                                    userAttributes: [{
-                                        Name: 'sub',
-                                        Value: 'uuid'
-                                    }],
-                                    userEnabled: false
-                                })
-                            }
-                        ]
-                    });
-                }
-            };
-        }).mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: []
-                    });
-                }
-            };
+        mockSqs.on(ReceiveMessageCommand).resolvesOnce({
+                Messages: [
+                    {
+                        Body: JSON.stringify({
+                            id: 'row-id',
+                            type: 'user-type',
+                            username: 'test-user',
+                            userAttributes: [{
+                                Name: 'sub',
+                                Value: 'uuid'
+                            }],
+                            userEnabled: false
+                        })
+                    }
+                ]
+            
+        }).resolvesOnce({
+                Messages: []
+            
         });
 
-        mockSqs.deleteMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+        mockSqs.on(DeleteMessageBatchCommand).resolvesOnce(() => {
+            return Promise.resolve({});
         });
 
-        mockCognitoISP.adminDisableUser.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+        mockCognitoISP.on(AdminDisableUserCommand).resolvesOnce(() => {
+            return Promise.resolve({});
         });
 
         const event = {
@@ -336,12 +197,132 @@ describe('import-new-users: UpdateNewUsers', function () {
             }
         });
     });
+
+
+    it('Throw error when deleting message batches fails', async function () {
+        mockSqs.on(ReceiveMessageCommand).resolvesOnce({
+                Messages: [
+                    {
+                        Body: JSON.stringify({
+                            id: 'row-id',
+                            type: 'user-type',
+                            username: 'test-user',
+                            userAttributes: [{
+                                Name: 'sub',
+                                Value: 'uuid'
+                            }],
+                            userEnabled: false
+                        })
+                    }
+                ]
+            }).resolvesOnce({
+                Messages: []
+            });
+
+        mockSqs.on(DeleteMessageBatchCommand).rejects('DeletionError')
+
+        mockCognitoISP.on(AdminDisableUserCommand).resolvesOnce(() => {
+            return Promise.resolve({});
+        });
+
+        const event = {
+            Context: {
+                Execution: { Input: { NewUserPoolId: 'user-pool-id' } },
+                State: { Name: 'UpdateNewUsers' }
+            }
+        };
+        const lambda = require('../update-new-users');
+        await expect(async () => {
+            await lambda.handler(event);
+        }).rejects.toThrow('DeletionError');
+    });
+
+
+});
+
+describe('import-new-users: Reseting', function(){
+
+
+    beforeEach(() => {
+        jest.resetModules();        
+        process.env = Object.assign(process.env, { COGNITO_TPS: '0' });
+    });
+
+    it('Resets when cognitoApiCallCount >= cognitoTPS', async function () {
+
+        const { CognitoIdentityProvider, AdminAddUserToGroupCommand, AdminDisableUserCommand } = require("@aws-sdk/client-cognito-identity-provider");
+        const mockCognitoISP = mockClient(CognitoIdentityProvider);
+
+        const { SQS, ReceiveMessageCommand, DeleteMessageBatchCommand } = require("@aws-sdk/client-sqs");
+        const mockSqs = mockClient(SQS);
+
+        const mockSqs2 = mockClient(SQS);
+        const mockCognitoISP2 = mockClient(CognitoIdentityProvider);
+        console.log('start resets test')
+        process.env = { COGNITO_TPS: '0' };
+
+        mockSqs2.on(ReceiveMessageCommand).resolvesOnce({
+                Messages: [
+                    {
+                        Body: JSON.stringify({
+                            id: 'row-id',
+                            type: 'user-type',
+                            username: 'test-user',
+                            userAttributes: [{
+                                Name: 'sub',
+                                Value: 'uuid'
+                            }],
+                            userEnabled: false
+                        })
+                    },
+                    {
+                        Body: JSON.stringify({
+                            id: 'row-id',
+                            type: 'user-type',
+                            username: 'test-user',
+                            userAttributes: [{
+                                Name: 'sub',
+                                Value: 'uuid'
+                            }],
+                            userEnabled: false
+                        })
+                    }
+                ]}).resolvesOnce({
+                Messages: []
+            });
+        
+
+        mockSqs2.on(DeleteMessageBatchCommand).resolvesOnce({});
+
+        mockCognitoISP2.on(AdminDisableUserCommand).resolvesOnce({});
+
+        console.log(process.env)
+        const event = {
+            Context: {
+                Execution: { Input: { NewUserPoolId: 'user-pool-id' } },
+                State: { Name: 'UpdateNewUsers' }
+            }
+        };
+        const lambda = require('../update-new-users');
+        const result = await lambda.handler(event, context);
+        expect(result).toEqual({
+            result: {
+                QueueEmpty: true,
+                StateName: event.Context.State.Name
+            }
+        });        
+    });
 });
 
 describe('import-new-users: Errors', function () {
     beforeEach(() => {
         jest.resetModules();
         process.env = Object.assign(process.env, { COGNITO_TPS: 'invalid' });
+    });
+
+    afterEach(() => {
+        jest.resetModules();
+        process.env = Object.assign(process.env, { COGNITO_TPS: '10' });
     });
 
     it('Throws an error if an invalid CognitoTPS value is set', async function () {

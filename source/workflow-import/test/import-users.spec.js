@@ -5,57 +5,16 @@
  * @author Solution Builders
  */
 
-// Mock AWS SDK
-const mockCognitoISP = {
-    getCSVHeader: jest.fn(),
-    createUserImportJob: jest.fn(),
-    startUserImportJob: jest.fn(),
-    describeUserImportJob: jest.fn(),
-    adminAddUserToGroup: jest.fn(),
-    adminDisableUser: jest.fn()
-};
+const { mockClient } = require('aws-sdk-client-mock');
+const { CognitoIdentityProvider, GetCSVHeaderCommand, CreateUserImportJobCommand,
+    StartUserImportJobCommand, DescribeUserImportJobCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const mockCognitoISP = mockClient(CognitoIdentityProvider);
 
-const mockDocClient = {
-    scan: jest.fn()
-};
+const { S3, PutObjectCommand } = require("@aws-sdk/client-s3");
+const mockS3 = mockClient(S3);
 
-const mockSqs = {
-    sendMessageBatch: jest.fn(),
-    receiveMessage: jest.fn(),
-    deleteMessageBatch: jest.fn()
-};
-
-const mockS3 = {
-    scan: jest.fn(),
-    putObject: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        CognitoIdentityServiceProvider: jest.fn(() => ({
-            getCSVHeader: mockCognitoISP.getCSVHeader,
-            createUserImportJob: mockCognitoISP.createUserImportJob,
-            startUserImportJob: mockCognitoISP.startUserImportJob,
-            describeUserImportJob: mockCognitoISP.describeUserImportJob,
-            adminAddUserToGroup: mockCognitoISP.adminAddUserToGroup,
-            adminDisableUser: mockCognitoISP.adminDisableUser
-        })),
-        DynamoDB: {
-            DocumentClient: jest.fn(() => ({
-                scan: mockDocClient.scan
-            }))
-        },
-        SQS: jest.fn(() => ({
-            sendMessageBatch: mockSqs.sendMessageBatch,
-            receiveMessage: mockSqs.receiveMessage,
-            deleteMessageBatch: mockSqs.deleteMessageBatch
-        })),
-        S3: jest.fn(() => ({
-            scan: mockS3.scan,
-            putObject: mockS3.putObject
-        }))
-    };
-});
+const { SQS, SendMessageBatchCommand, ReceiveMessageCommand, DeleteMessageBatchCommand } = require("@aws-sdk/client-sqs");
+const mockSqs = mockClient(SQS);
 
 // Mock Axios
 const axios = require('axios');
@@ -89,30 +48,10 @@ beforeAll(() => {
         TYPE_USER: 'user-type',
         TYPE_GROUP: 'group-type'
     });
-
-    for (const mockFn in mockCognitoISP) {
-        mockCognitoISP[mockFn].mockReset();
-    }
-
-    for (const mockFn in mockDocClient) {
-        mockDocClient[mockFn].mockReset();
-    }
-
-    for (const mockFn in mockSqs) {
-        mockSqs[mockFn].mockReset();
-    }
 });
 
 describe('import-new-users: Unknown State Name', function () {
     it('Throws error for unknown state name', async function () {
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
-
         const event = {
             Context: {
                 Execution: { Input: { NewUserPoolId: 'user-pool-id' } },
@@ -127,14 +66,13 @@ describe('import-new-users: Unknown State Name', function () {
 });
 
 describe('import-new-users: ImportNewUsers', function () {
+    beforeEach(() => {
+        mockCognitoISP.reset();
+        mockSqs.reset();
+        mockS3.reset();
+    })
     it('Returns when no messages are returned from the Queue', async function () {
-        mockSqs.receiveMessage.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ Messages: [] });
-                }
-            };
-        });
+        mockSqs.on(ReceiveMessageCommand).resolvesOnce({ Messages: [] });
 
         const event = {
             Context: {
@@ -154,84 +92,29 @@ describe('import-new-users: ImportNewUsers', function () {
     });
 
     it('Creates an import job when a new user is added and returns the job id', async function () {
-        mockSqs.receiveMessage.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: [
-                            {
-                                Body: JSON.stringify({
-                                    id: 'row-id',
-                                    type: 'user : uuid',
-                                    username: 'test-user',
-                                    userAttributes: [{
-                                        Name: 'sub',
-                                        Value: 'uuid'
-                                    }],
-                                    userEnabled: true
-                                })
-                            }
-                        ]
-                    });
+        mockSqs.on(ReceiveMessageCommand).resolvesOnce({
+            Messages: [
+                {
+                    Body: JSON.stringify({
+                        id: 'row-id',
+                        type: 'user : uuid',
+                        username: 'test-user',
+                        userAttributes: [{
+                            Name: 'sub',
+                            Value: 'uuid'
+                        }],
+                        userEnabled: true
+                    })
                 }
-            };
-        }).mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: []
-                    });
-                }
-            };
-        });
+            ]
+        }).resolvesOnce({Messages: []});
 
-        mockCognitoISP.getCSVHeader.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ CSVHeader: ['cognito:username', 'cognito:mfa_enabled', 'custom:foobar', 'email_verified', 'phone_number_verified'] });
-                }
-            };
-        });
-
-        mockSqs.sendMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
-
-        mockSqs.deleteMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
-
-        mockCognitoISP.createUserImportJob.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ UserImportJob: { JobId: 'job-id', Status: 'Pending', PreSignedUrl: '/pre-signed-url' } });
-                }
-            };
-        });
-
-        mockS3.putObject.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
-
-        mockCognitoISP.startUserImportJob.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ UserImportJob: { JobId: 'job-id', Status: 'Pending', PreSignedUrl: '/pre-signed-url' } });
-                }
-            };
-        });
+        mockCognitoISP.on(GetCSVHeaderCommand).resolvesOnce({ CSVHeader: ['cognito:username', 'cognito:mfa_enabled', 'custom:foobar', 'email_verified', 'phone_number_verified'] });
+        mockSqs.on(SendMessageBatchCommand).resolvesOnce({});
+        mockSqs.on(DeleteMessageBatchCommand).resolvesOnce({});
+        mockCognitoISP.on(CreateUserImportJobCommand).resolvesOnce({ UserImportJob: { JobId: 'job-id', Status: 'Pending', PreSignedUrl: '/pre-signed-url' } });
+        mockS3.on(PutObjectCommand).resolvesOnce({});
+        mockCognitoISP.on(StartUserImportJobCommand).resolvesOnce({ UserImportJob: { JobId: 'job-id', Status: 'Pending', PreSignedUrl: '/pre-signed-url' } });
 
         const event = {
             Context: {
@@ -252,52 +135,32 @@ describe('import-new-users: ImportNewUsers', function () {
     });
 
     it('Throws an error when the sub can\'t be retrieved', async function () {
-        mockSqs.receiveMessage.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: [
-                            {
-                                Body: JSON.stringify({
-                                    id: 'row-id',
-                                    type: 'user : uuid',
-                                    username: 'test-user',
-                                    userAttributes: [{
-                                        Name: 'not-the-sub',
-                                        Value: 'uuid'
-                                    }],
-                                    userEnabled: true
-                                })
-                            }
-                        ]
-                    });
+        mockSqs.on(ReceiveMessageCommand).resolvesOnce({
+            Messages: [
+                {
+                    Body: JSON.stringify({
+                        id: 'row-id',
+                        type: 'user : uuid',
+                        username: 'test-user',
+                        userAttributes: [{
+                            Name: 'not-the-sub',
+                            Value: 'uuid'
+                        }],
+                        userEnabled: true
+                    })
                 }
-            };
+            ]
         });
 
-        mockCognitoISP.getCSVHeader.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ CSVHeader: ['cognito:username', 'cognito:mfa_enabled', 'custom:foobar', 'email_verified', 'phone_number_verified'] });
-                }
-            };
+        mockCognitoISP.on(GetCSVHeaderCommand).resolvesOnce(
+            { CSVHeader: ['cognito:username', 'cognito:mfa_enabled', 'custom:foobar', 'email_verified', 'phone_number_verified'] }
+        );
+
+        mockSqs.on(SendMessageBatchCommand).resolvesOnce(() => {
+            return Promise.resolve({});
         });
 
-        mockSqs.sendMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
-
-        mockSqs.deleteMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockSqs.on(DeleteMessageBatchCommand).resolvesOnce({});
 
         const event = {
             Context: {
@@ -313,21 +176,16 @@ describe('import-new-users: ImportNewUsers', function () {
 });
 
 describe('import-new-users: CheckUserImportJob', function () {
+    beforeEach(() => {
+        mockCognitoISP.reset();
+        mockSqs.reset();
+        mockS3.reset();
+    })
     it('Throws an error when the job fails', async function () {
-        mockCognitoISP.describeUserImportJob.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ UserImportJob: { Status: 'Failed', JobId: 'job-id' } });
-                }
-            };
-        });
+        mockCognitoISP.on(DescribeUserImportJobCommand).resolvesOnce({ UserImportJob: { Status: 'Failed', JobId: 'job-id' } });
 
         Metrics.sendAnonymousMetric.mockImplementationOnce(async (x, y, z) => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
+            return Promise.resolve({});
         });
 
         const event = {
@@ -345,13 +203,7 @@ describe('import-new-users: CheckUserImportJob', function () {
     });
 
     it('Returns the expected result when the job is still Pending', async function () {
-        mockCognitoISP.describeUserImportJob.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ UserImportJob: { Status: 'Pending', JobId: 'job-id' } });
-                }
-            };
-        });
+        mockCognitoISP.on(DescribeUserImportJobCommand).resolvesOnce({ UserImportJob: { Status: 'Pending', JobId: 'job-id' } });
 
         const event = {
             Context: {
@@ -372,13 +224,7 @@ describe('import-new-users: CheckUserImportJob', function () {
     });
 
     it('Returns the expected result when the job is still InProgress', async function () {
-        mockCognitoISP.describeUserImportJob.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ UserImportJob: { Status: 'InProgress', JobId: 'job-id' } });
-                }
-            };
-        });
+        mockCognitoISP.on(DescribeUserImportJobCommand).resolvesOnce({ UserImportJob: { Status: 'InProgress', JobId: 'job-id' } });
 
         const event = {
             Context: {
@@ -399,13 +245,7 @@ describe('import-new-users: CheckUserImportJob', function () {
     });
 
     it('Returns the expected result when the job Succeeded', async function () {
-        mockCognitoISP.describeUserImportJob.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({ UserImportJob: { Status: 'Succeeded', JobId: 'job-id' } });
-                }
-            };
-        });
+        mockCognitoISP.on(DescribeUserImportJobCommand).resolvesOnce({ UserImportJob: { Status: 'Succeeded', JobId: 'job-id' } });
 
         const event = {
             Context: {
