@@ -5,46 +5,27 @@
  * @author Solution Builders
  */
 
-// Mock AWS SDK
-const mockCognito = {
-    listUsers: jest.fn(),
-    listGroups: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        CognitoIdentityServiceProvider: jest.fn(() => ({
-            listUsers: mockCognito.listUsers,
-            listGroups: mockCognito.listGroups
-        }))
-    };
-});
+const { mockClient } = require('aws-sdk-client-mock');
+const { CognitoIdentityProvider, ListUsersCommand, ListGroupsCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const mockCognito = mockClient(CognitoIdentityProvider);
 
 describe('check-new-user-pool', function () {
     beforeEach(() => {
-        process.env.NEW_USER_POOL_ID = 'user-pool-id';
-        for (const mockFn in mockCognito) {
-            mockCognito[mockFn].mockReset();
-        }
+        process.env.NEW_USER_POOL_ID = 'user-pool-id_abcd123';
+        mockCognito.reset();
     });
 
     it('Returns NewUserPoolEmpty=false if the new user pool has users in it', async function () {
-        mockCognito.listUsers.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Users: [{
-                            id: 'user-id',
-                            username: 'username'
-                        }]
-                    });
-                }
-            };
-        });
+
+        mockCognito.on(ListUsersCommand).resolvesOnce({
+                Users: [{
+                    id: 'user-id',
+                    username: 'username'
+                }]});
 
         const event = {
             Context: {
-                Execution: { Input: { NewUserPoolId: 'user-pool-id' } }
+                Execution: { Input: { NewUserPoolId: 'user-pool-id_abcd123' } }
             }
         };
         const lambda = require('../check-new-user-pool');
@@ -66,27 +47,15 @@ describe('check-new-user-pool', function () {
     });
 
     it('Returns NewUserPoolEmpty=false if the new user pool has groups in it', async function () {
-        mockCognito.listUsers.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Users: []
-                    });
-                }
-            };
+        mockCognito.on(ListUsersCommand).resolvesOnce({
+            Users: []
         });
 
-        mockCognito.listGroups.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Groups: [{
-                            groupName: 'name',
-                            groupDescription: 'desc'
-                        }]
-                    });
-                }
-            };
+        mockCognito.on(ListGroupsCommand).resolvesOnce({
+            Groups: [{
+                groupName: 'name',
+                groupDescription: 'desc'
+            }]
         });
 
         const event = {
@@ -100,24 +69,12 @@ describe('check-new-user-pool', function () {
     });
 
     it('Returns NewUserPoolEmpty=true if the new user pool has no users or groups in it', async function () {
-        mockCognito.listUsers.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Users: []
-                    });
-                }
-            };
+        mockCognito.on(ListUsersCommand).resolvesOnce({
+            Users: []
         });
 
-        mockCognito.listGroups.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Groups: []
-                    });
-                }
-            };
+        mockCognito.on(ListGroupsCommand).resolvesOnce({
+            Groups: []
         });
 
         const event = {

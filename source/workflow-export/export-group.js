@@ -6,7 +6,12 @@
  */
 
 const { getOptions } = require('../utils/metrics');
-const AWS = require('aws-sdk');
+const {
+          DynamoDBClient
+      } = require("@aws-sdk/client-dynamodb"),
+      { 
+        DynamoDBDocumentClient, PutCommand
+      } = require("@aws-sdk/lib-dynamodb");
 const { BACKUP_TABLE_NAME, AWS_REGION, TYPE_GROUP } = process.env;
 
 /**
@@ -36,7 +41,8 @@ exports.handler = async (event) => {
  * @param {number} exportTimestamp The timestamp for the latest export
  */
 const exportGroupName = async function exportGroupNameToBackupTable(groupName, groupDescription, groupPrecedence, groupLastModifiedDate, exportTimestamp) {
-    const docClient = new AWS.DynamoDB.DocumentClient(getOptions());
+    const dynamodbClient = new DynamoDBClient(getOptions());
+    const docClient = DynamoDBDocumentClient.from(dynamodbClient);
     const putParams = {
         TableName: BACKUP_TABLE_NAME,
         Item: {
@@ -52,6 +58,6 @@ const exportGroupName = async function exportGroupNameToBackupTable(groupName, g
     };
 
     console.log(`Putting group in table: ${JSON.stringify(putParams)}`);
-    await docClient.put(putParams).promise();
+    await docClient.send(new PutCommand(putParams));
     console.log('Group put successfully');
 };

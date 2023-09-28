@@ -6,8 +6,10 @@
  */
 
 const { getOptions } = require('../utils/metrics');
-const AWS = require('aws-sdk');
-const cfn = new AWS.CloudFormation(getOptions());
+const {
+    CloudFormation
+} = require("@aws-sdk/client-cloudformation");
+const cfn = new CloudFormation(getOptions());
 const axios = require('axios');
 
 /**
@@ -58,7 +60,7 @@ const areAllInstancesUpdated = async (stackSetName, operationId) => {
 
     do {
         console.log(`Listing Operation Results: ${JSON.stringify(listParams)}`);
-        listResponse = await cfn.listStackSetOperationResults(listParams).promise();
+        listResponse = await cfn.listStackSetOperationResults(listParams);
         console.log(`List Operation Results Response: ${JSON.stringify(listResponse)}`);
         if (listResponse.Summaries && listResponse.Summaries.length > 0) {
             operationSummaries.push(...listResponse.Summaries);
@@ -92,7 +94,7 @@ const deleteStackSet = async function deleteStackSet(StackSetName) {
     const params = { StackSetName };
 
     console.log(`Deleting StackSet: ${JSON.stringify(params)}`);
-    const response = await cfn.deleteStackSet(params).promise();
+    const response = await cfn.deleteStackSet(params);
     console.log(`Delete StackSet response: ${JSON.stringify(response)}`);
 };
 

@@ -3,10 +3,13 @@
   "version": "1.0.2",
   "description": "Custom Resource Helper functions",
   "scripts": {
-    "clean": "rm -rf dist/ node_modules/ coverage/ package-lock.json",
+    "clean": "rm -rf dist/ node_modules/ coverage/",
     "test": "jest --config jestconfig.json --coverage --silent"
   },
-"author": {"name": "Amazon Web Services", "url": "https://aws.amazon.com/solutions"},
+  "author": {
+    "name": "Amazon Web Services",
+    "url": "https://aws.amazon.com/solutions"
+  },
   "license": "Apache-2.0",
   "dependencies": {
     "axios": "^1.4.0",

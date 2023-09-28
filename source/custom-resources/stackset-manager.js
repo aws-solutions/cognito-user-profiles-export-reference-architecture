@@ -6,13 +6,18 @@
  */
 
 const { getOptions } = require('../utils/metrics');
-const AWS = require('aws-sdk');
-const cfn = new AWS.CloudFormation(getOptions());
-const stepFunctions = new AWS.StepFunctions(getOptions());
+const {
+          CloudFormation
+      } = require("@aws-sdk/client-cloudformation"),
+      {
+          SFN: StepFunctions
+      } = require("@aws-sdk/client-sfn");
+const cfn = new CloudFormation(getOptions());
+const stepFunctions = new StepFunctions(getOptions());
 const axios = require('axios');
 const { AWS_REGION, STATE_MACHINE_ARN } = process.env;
 
-// Values for sending anonymous metrics
+// Values for sending anonymized metrics
 const { SEND_METRIC, METRICS_ANONYMOUS_UUID, SOLUTION_ID, SOLUTION_VERSION, COGNITO_TPS, EXPORT_FREQUENCY, SNS_PREFERENCE } = process.env;
 const { sendAnonymousMetric } = require('../utils/metrics');
 
@@ -51,10 +56,10 @@ exports.handler = async (event, context) => {
             })
         };
         console.log(`Starting State Machine execution: ${JSON.stringify(startExecutionParams)}`);
-        const startExecutionResponse = await stepFunctions.startExecution(startExecutionParams).promise();
+        const startExecutionResponse = await stepFunctions.startExecution(startExecutionParams);
         console.log(`State machine started: ${JSON.stringify(startExecutionResponse)}`);
 
-        // If enabled, send anonymous metric
+        // If enabled, send anonymized metric
         if (SEND_METRIC === 'Yes') {
             try {
                 const payload = {
@@ -105,7 +110,7 @@ const createStackSet = async function createStackSet(event) {
     };
 
     console.log(`Creating StackSet: ${JSON.stringify(params)}`);
-    const response = await cfn.createStackSet(params).promise();
+    const response = await cfn.createStackSet(params);
     console.log(`Create StackSet Response: ${JSON.stringify(response)}`);
 };
 
@@ -123,7 +128,7 @@ const createStackInstances = async function createStackInstances(event) {
     }
 
     console.log(`Creating StackSet Instance: ${JSON.stringify(params)}`);
-    const response = await cfn.createStackInstances(params).promise();
+    const response = await cfn.createStackInstances(params);
     console.log(`Create StackSet Instance Response: ${JSON.stringify(response)}`);
     return response.OperationId;
 };
@@ -143,7 +148,7 @@ const deleteStackInstances = async function deleteStackInstances(event) {
     }
 
     console.log(`Deleting Stack Instances: ${JSON.stringify(params)}`);
-    const response = await cfn.deleteStackInstances(params).promise();
+    const response = await cfn.deleteStackInstances(params);
     console.log(`Delete Stack Instances response: ${JSON.stringify(response)}`);
     return response.OperationId;
 };
@@ -166,7 +171,7 @@ const updateStackSet = async (event) => {
     };
 
     console.log(`Updating StackSet: ${JSON.stringify(params)}`);
-    const response = await cfn.updateStackSet(params).promise();
+    const response = await cfn.updateStackSet(params);
     console.log(`Update StackSet response: ${JSON.stringify(response)}`);
     return response.OperationId;
 };

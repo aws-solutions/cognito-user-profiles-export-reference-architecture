@@ -9,6 +9,17 @@
 const Metrics = require('../../utils/metrics');
 jest.mock('../../utils/metrics');
 
+const {
+    CloudFormationClient, CreateStackSetCommand, CreateStackInstancesCommand, UpdateStackSetCommand, DeleteStackInstancesCommand,
+    InvalidOperationException
+} = require("@aws-sdk/client-cloudformation");
+
+const {
+    SFNClient: StepFunctionsClient, StartExecutionCommand, ExecutionAlreadyExists
+} = require("@aws-sdk/client-sfn");
+
+const { mockClient } = require('aws-sdk-client-mock');
+
 // Mock context
 const context = {
     logStreamName: 'log-stream',
@@ -23,47 +34,16 @@ const MockAdapter = require('axios-mock-adapter');
 let axiosMock = new MockAdapter(axios);
 
 // Mock AWS SDK
-const mockCfn = {
-    createStackSet: jest.fn(),
-    createStackInstances: jest.fn(),
-    listStackInstances: jest.fn(),
-    deleteStackInstances: jest.fn(),
-    deleteStackSet: jest.fn(),
-    updateStackSet: jest.fn()
-};
-
-const mockStepFunctions = {
-    startExecution: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        CloudFormation: jest.fn(() => ({
-            createStackSet: mockCfn.createStackSet,
-            createStackInstances: mockCfn.createStackInstances,
-            listStackInstances: mockCfn.listStackInstances,
-            deleteStackInstances: mockCfn.deleteStackInstances,
-            deleteStackSet: mockCfn.deleteStackSet,
-            updateStackSet: mockCfn.updateStackSet
-        })),
-        StepFunctions: jest.fn(() => ({
-            startExecution: mockStepFunctions.startExecution
-        }))
-    };
-});
+const mockCfn = mockClient(CloudFormationClient);
+const mockStepFunctions = mockClient(StepFunctionsClient);
 
 describe('stackset-manager', function () {
     beforeEach(() => {
         process.env.AWS_REGION = 'us-east-1';
         process.env.STATE_MACHINE_ARN = 'state-machine-arn';
         process.env.SEND_METRIC = 'Yes';
-        for (const mockFn in mockCfn) {
-            mockCfn[mockFn].mockReset();
-        }
-
-        for (const mockFn in mockStepFunctions) {
-            mockStepFunctions[mockFn].mockReset();
-        }
+        mockCfn.reset();
+        mockStepFunctions.reset();
         axiosMock = new MockAdapter(axios);
     });
 
@@ -92,29 +72,10 @@ describe('stackset-manager', function () {
             };
         });
 
-        mockCfn.createStackSet.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockCfn.on(CreateStackSetCommand).resolvesOnce({});
+        mockCfn.on(CreateStackInstancesCommand).resolvesOnce({});
 
-        mockCfn.createStackInstances.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
-
-        mockStepFunctions.startExecution.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockStepFunctions.on(StartExecutionCommand).resolvesOnce({});
 
         const lambda = require('../stackset-manager');
         await lambda.handler(event, context);
@@ -133,21 +94,8 @@ describe('stackset-manager', function () {
             }
         };
 
-        mockCfn.updateStackSet.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
-
-        mockStepFunctions.startExecution.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockCfn.on(UpdateStackSetCommand).resolvesOnce({});
+        mockStepFunctions.on(StartExecutionCommand).resolvesOnce({});
 
         const lambda = require('../stackset-manager');
         await lambda.handler(event, context);
@@ -166,21 +114,8 @@ describe('stackset-manager', function () {
             }
         };
 
-        mockCfn.deleteStackInstances.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
-
-        mockStepFunctions.startExecution.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockCfn.on(DeleteStackInstancesCommand).resolvesOnce({});
+        mockStepFunctions.on(StartExecutionCommand).resolvesOnce({});
 
         const lambda = require('../stackset-manager');
         await lambda.handler(event, context);
@@ -202,13 +137,7 @@ describe('stackset-manager', function () {
             }
         };
 
-        mockCfn.deleteStackInstances.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.reject({ message: 'an error' });
-                }
-            };
-        });
+        mockCfn.on(DeleteStackInstancesCommand).rejectsOnce(new InvalidOperationException({ message: 'an error' }));
 
         const lambda = require('../stackset-manager');
         await lambda.handler(event, context);

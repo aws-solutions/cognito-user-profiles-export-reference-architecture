@@ -6,8 +6,10 @@
  */
 
 const { getOptions } = require('../utils/metrics');
-const AWS = require('aws-sdk');
-const sqs = new AWS.SQS(getOptions());
+const {
+    SQS
+} = require("@aws-sdk/client-sqs");
+const sqs = new SQS(getOptions());
 const { NEW_USERS_QUEUE_URL, UPDATES_QUEUE_URL } = process.env;
 
 /**
@@ -41,7 +43,7 @@ const isQueueEmpty = async (queueUrl) => {
     const params = { QueueUrl: queueUrl, AttributeNames: ['All'] };
 
     console.log(`Getting queue attributes: ${JSON.stringify(params)}`);
-    const response = await sqs.getQueueAttributes(params).promise();
+    const response = await sqs.getQueueAttributes(params);
     console.log('Get queue attributes response', JSON.stringify(response, null, 2));
 
     for (let attribute of attributesToCheck) {

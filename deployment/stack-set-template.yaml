@@ -65,7 +65,7 @@ Metadata:
       ParentStackName:
         default: "ParentStackName: The name given to this solution's main CloudFormation stack"
       SendAnonymousData:
-        default: "SendAnonymousData: Flag indicating whether or not to send anonymous operational metrics. Value comes from the 'SendAnonymousData' mapping in the solution's main CloudFormation template"
+        default: "SendAnonymousData: Flag indicating whether or not to send anonymized operational metrics. Value comes from the 'SendAnonymousData' mapping in the solution's main CloudFormation template"
 
 Mappings:
   Solution:
@@ -89,6 +89,7 @@ Resources:
   #######################################
   StackSetConstantsCustomResourceLambda:
     Type: AWS::Lambda::Function
+    DependsOn: StackSetConstantsCustomResourceLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -106,7 +107,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/stackset-constants.handler"
       Role: !GetAtt StackSetConstantsCustomResourceLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -688,6 +689,7 @@ Resources:
 
   CheckWorkflowQueuesLambda:
     Type: AWS::Lambda::Function
+    DependsOn: CheckWorkflowQueuesLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -705,7 +707,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-common.zip"]]
       Handler: "workflow-common/check-workflow-queues.handler"
       Role: !GetAtt CheckWorkflowQueuesLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -756,6 +758,7 @@ Resources:
 
   ImportCheckNewUserPoolLambda:
     Type: AWS::Lambda::Function
+    DependsOn: ImportCheckNewUserPoolLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -773,7 +776,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/check-new-user-pool.handler"
       Role: !GetAtt ImportCheckNewUserPoolLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -822,6 +825,7 @@ Resources:
 
   ImportScanTableLambda:
     Type: AWS::Lambda::Function
+    DependsOn: ImportScanTableLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -839,7 +843,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/scan-table.handler"
       Role: !GetAtt ImportScanTableLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 300
       MemorySize: 128
       Environment:
@@ -942,6 +946,7 @@ Resources:
 
   ImportNewUsersLambda:
     Type: AWS::Lambda::Function
+    DependsOn: ImportNewUsersLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -959,7 +964,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/import-users.handler"
       Role: !GetAtt ImportNewUsersLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 900
       MemorySize: 1024  # Higher memory size to allow for large CSV files to be uploaded to the Cognito User Import Job
       Environment:
@@ -1054,6 +1059,7 @@ Resources:
 
   ImportCheckImportJobLambda:
     Type: AWS::Lambda::Function
+    DependsOn: ImportCheckImportJobLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -1071,7 +1077,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/import-users.handler"
       Role: !GetAtt ImportCheckImportJobLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -1140,6 +1146,7 @@ Resources:
 
   ImportUpdateNewUsersLambda:
     Type: AWS::Lambda::Function
+    DependsOn: ImportUpdateNewUsersLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -1157,7 +1164,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/update-new-users.handler"
       Role: !GetAtt ImportUpdateNewUsersLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 900
       MemorySize: 128
       Environment:
@@ -1249,6 +1256,7 @@ Resources:
 
   WorkflowMessageBrokerLambda:
     Type: AWS::Lambda::Function
+    DependsOn: WorkflowMessageBrokerLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -1266,7 +1274,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-common.zip"]]
-      Runtime:  nodejs14.x
+      Runtime:  nodejs18.x
       Timeout: 300
       Environment:
         Variables:
@@ -1366,11 +1374,22 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: aws:kms
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W51
-            reason: Policy not required for this bucket.
+
+  UserImportJobMappingFilesPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UserImportJobMappingFiles
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: "*"
+            Resource: !Sub arn:${AWS::Partition}:s3:::${UserImportJobMappingFiles}/* 
+            Condition:
+              Bool:
+                "aws:SecureTransport": false
 
   UserImportJobMappingFilesLogsBucket:
     Type: AWS::S3::Bucket
@@ -1379,8 +1398,6 @@ Resources:
         rules_to_suppress:
           - id: W35
             reason: Logging not enabled, as this is the logging destination for the other s3 buckets in this template.
-          - id: W51
-            reason: Policy not required for this bucket.
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
@@ -1405,6 +1422,14 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
+          - Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: "*"
+            Resource: !Sub arn:${AWS::Partition}:s3:::${UserImportJobMappingFilesLogsBucket}/* 
+            Condition:
+              Bool:
+                "aws:SecureTransport": false
           - Sid: S3ServerAccessLogsPolicy
             Effect: Allow
             Principal:
@@ -1437,6 +1462,7 @@ Resources:
 
   CheckExecutionsLambda:
     Type: AWS::Lambda::Function
+    DependsOn: CheckExecutionsLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -1454,7 +1480,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-common.zip"]]
-      Runtime:  nodejs14.x
+      Runtime:  nodejs18.x
       Timeout: 300
       Environment:
         Variables:
@@ -1960,6 +1986,7 @@ Resources:
 
   ExportUsersLambda:
     Type: AWS::Lambda::Function
+    DependsOn: ExportUsersLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -1978,7 +2005,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-export.zip"]]
       Handler: "workflow-export/export-users.handler"
       Role: !GetAtt ExportUsersLambdaRole.Arn
-      Runtime: nodejs16.x
+      Runtime: nodejs18.x
       Timeout: 900
       MemorySize: 128
       Environment:
@@ -2037,6 +2064,7 @@ Resources:
 
   ListGroupsLambda:
     Type: AWS::Lambda::Function
+    DependsOn: ListGroupsLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -2055,7 +2083,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs14.x
+      Runtime:  nodejs18.x
       Timeout: 300
       Environment:
         Variables:
@@ -2099,6 +2127,7 @@ Resources:
 
   ExportGroupLambda:
     Type: AWS::Lambda::Function
+    DependsOn: ExportGroupLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -2117,7 +2146,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs14.x
+      Runtime:  nodejs18.x
       Timeout: 300
       Environment:
         Variables:
@@ -2162,6 +2191,7 @@ Resources:
 
   ExportUsersInGroupLambda:
     Type: AWS::Lambda::Function
+    DependsOn: ExportUsersInGroupLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -2180,7 +2210,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs14.x
+      Runtime:  nodejs18.x
       Timeout: 300
       Environment:
         Variables:
@@ -2230,6 +2260,7 @@ Resources:
 
   CheckUserPoolConfigLambda:
     Type: AWS::Lambda::Function
+    DependsOn: CheckUserPoolConfigLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -2248,7 +2279,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs14.x
+      Runtime:  nodejs18.x
       Timeout: 300
       Environment:
         Variables:
@@ -2321,6 +2352,7 @@ Resources:
 
   BackupTableCleanupLambda:
     Type: AWS::Lambda::Function
+    DependsOn: BackupTableCleanupLambdaRole
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -2339,7 +2371,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs14.x
+      Runtime:  nodejs18.x
       Timeout: 300
       Environment:
         Variables:

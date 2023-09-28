@@ -1,7 +1,10 @@
 {
   "name": "workflow-export",
   "description": "Exports Cognito user profiles, group data and group memberships to the solution's Backup Table in DynamoDB",
-"author": {"name": "Amazon Web Services", "url": "https://aws.amazon.com/solutions"},
+  "author": {
+    "name": "Amazon Web Services",
+    "url": "https://aws.amazon.com/solutions"
+  },
   "license": "Apache-2.0",
   "version": "1.0.2",
   "private": true,
@@ -9,15 +12,19 @@
     "uuid": "^8.3.0"
   },
   "devDependencies": {
-    "aws-sdk": "^2.904.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.403.0",
+    "@aws-sdk/client-dynamodb": "^3.398.0",
+    "@aws-sdk/client-sqs": "^3.398.0",
+    "@aws-sdk/lib-dynamodb": "^3.398.0",
+    "aws-sdk-client-mock": "^3.0.0",
     "jest": "^29.6.1"
   },
   "scripts": {
-    "clean": "rm -rf dist/ node_modules/ coverage/ package-lock.json",
+    "clean": "rm -rf dist/ node_modules/ coverage/",
     "test": "jest test/*.spec.js --coverage --silent",
     "package:zip": "cd dist && zip -rq package.zip .",
     "package:dist": "mkdir dist && rsync -avr ../utils ./dist/ && rsync -avr --exclude=*test* --exclude=*dist* --exclude=*node_modules* ./ ./dist/$npm_package_name && rsync -avr ./node_modules ./dist/$npm_package_name",
     "package": "npm run clean && npm install --production && npm run package:dist && npm run package:zip",
-    "build": "npm run clean && rm -f package-lock.json && npm install"
+    "build": "npm run clean && npm install"
   }
 }

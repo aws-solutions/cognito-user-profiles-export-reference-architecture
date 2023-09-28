@@ -5,16 +5,12 @@
  * @author Solution Builders
  */
 
-const mockSqs = {
-    sendMessageBatch: jest.fn(),
-    receiveMessage: jest.fn(),
-    deleteMessageBatch: jest.fn()
-};
+const { mockClient } = require('aws-sdk-client-mock');
+const { SQS, SendMessageBatchCommand, ReceiveMessageCommand, DeleteMessageBatchCommand } = require("@aws-sdk/client-sqs");
+const mockSqs = mockClient(SQS);
 
-const mockDocClient = {
-    scan: jest.fn(),
-    batchWrite: jest.fn()
-};
+const { DynamoDBDocumentClient, BatchWriteCommand, ScanCommand } = require("@aws-sdk/lib-dynamodb");
+const mockDocClient = mockClient(DynamoDBDocumentClient);
 
 // Mock context
 const context = {
@@ -23,22 +19,6 @@ const context = {
         return 100000;
     }
 };
-
-jest.mock('aws-sdk', () => {
-    return {
-        SQS: jest.fn(() => ({
-            sendMessageBatch: mockSqs.sendMessageBatch,
-            receiveMessage: mockSqs.receiveMessage,
-            deleteMessageBatch: mockSqs.deleteMessageBatch
-        })),
-        DynamoDB: {
-            DocumentClient: jest.fn(() => ({
-                scan: mockDocClient.scan,
-                batchWrite: mockDocClient.batchWrite
-            }))
-        }
-    };
-});
 
 beforeAll(() => {
     process.env = Object.assign(process.env, {
@@ -49,24 +29,12 @@ beforeAll(() => {
 
 describe('find-items', () => {
     beforeEach(() => {
-        jest.resetModules();
-        for (const mockFn in mockSqs) {
-            mockSqs[mockFn].mockReset();
-        }
-
-        for (const mockFn in mockDocClient) {
-            mockDocClient[mockFn].mockReset();
-        }
+        mockSqs.reset();
+        mockDocClient.reset();
     });
 
     it('Should return when no items are returned', async function () {
-        mockDocClient.scan.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockDocClient.on(ScanCommand).resolves({});
 
         const event = {
             Context: {
@@ -88,42 +56,24 @@ describe('find-items', () => {
     });
 
     it('Should return when some items are returned', async function () {
-        mockDocClient.scan.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Count: 2,
-                        ScannedCount: 100,
-                        Items: [
-                            { id: 'user-id', type: 'user-type' },
-                            { id: 'user-id2', type: 'user-type' }
-                        ],
-                        LastEvaluatedKey: { id: 'last-eval-id', type: 'user-type' }
-                    });
-                }
-            };
-        }).mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Count: 2,
-                        ScannedCount: 100,
-                        Items: [
-                            { id: 'user-id', type: 'user-type' },
-                            { id: 'user-id2', type: 'user-type' }
-                        ]
-                    });
-                }
-            };
+        mockDocClient.on(ScanCommand).resolvesOnce({
+            Count: 2,
+            ScannedCount: 100,
+            Items: [
+                { id: 'user-id', type: 'user-type' },
+                { id: 'user-id2', type: 'user-type' }
+            ],
+            LastEvaluatedKey: { id: 'last-eval-id', type: 'user-type' }
+        }).resolvesOnce({
+            Count: 2,
+            ScannedCount: 100,
+            Items: [
+                { id: 'user-id', type: 'user-type' },
+                { id: 'user-id2', type: 'user-type' }
+            ]
         });
 
-        mockSqs.sendMessageBatch.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockSqs.on(SendMessageBatchCommand).resolvesOnce({});
 
         const event = {
             Context: {
@@ -147,14 +97,7 @@ describe('find-items', () => {
 
 describe('remove-items', () => {
     beforeEach(() => {
-        jest.resetModules();
-        for (const mockFn in mockSqs) {
-            mockSqs[mockFn].mockReset();
-        }
-
-        for (const mockFn in mockDocClient) {
-            mockDocClient[mockFn].mockReset();
-        }
+        mockSqs.reset();
     });
 
     it('NOOP for unknown state name', async function () {
@@ -170,13 +113,7 @@ describe('remove-items', () => {
     });
 
     it('Should return when no messages are in the queue', async function () {
-        mockSqs.receiveMessage.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockSqs.on(ReceiveMessageCommand).resolves({});
 
         const event = {
             Context: {
@@ -198,50 +135,20 @@ describe('remove-items', () => {
     });
 
     it('Should return when some messages are in the queue', async function () {
-        mockSqs.receiveMessage.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Messages: [
-                            { Body: JSON.stringify({ Key: { id: 'id', type: 'type' } }) }
-                        ]
-                    });
-                }
-            };
-        }).mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockSqs.on(ReceiveMessageCommand).resolvesOnce({
+                Messages: [
+                    { Body: JSON.stringify({ Key: { id: 'id', type: 'type' } }) }
+                ]
+            }).resolves({});
 
-        mockSqs.deleteMessageBatch.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({})
-                }
-            }
-        });
+        mockSqs.on(DeleteMessageBatchCommand).resolvesOnce({});
 
-        mockDocClient.batchWrite.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        UnprocessedItems: {
-                            'table-name': [{ id: 'id', type: 'type' }]
-                        }
-                    })
-                }
+        mockDocClient.on(BatchWriteCommand).resolvesOnce({
+            UnprocessedItems: {
+                'table-name': [{ id: 'id', type: 'type' }]
             }
-        }).mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        UnprocessedItems: {}
-                    })
-                }
-            }
+        }).resolvesOnce({
+            UnprocessedItems: {}
         });
 
         const event = {

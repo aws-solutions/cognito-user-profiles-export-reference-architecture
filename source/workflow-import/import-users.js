@@ -6,10 +6,18 @@
  */
 
 const { getOptions } = require('../utils/metrics');
-const AWS = require('aws-sdk');
-const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
-const sqs = new AWS.SQS(getOptions());
-const s3 = new AWS.S3(getOptions());
+const {
+          CognitoIdentityProvider: CognitoIdentityServiceProvider
+      } = require("@aws-sdk/client-cognito-identity-provider"),
+      {
+          S3
+      } = require("@aws-sdk/client-s3"),
+      {
+          SQS
+      } = require("@aws-sdk/client-sqs");
+const cognitoISP = new CognitoIdentityServiceProvider(getOptions());
+const sqs = new SQS(getOptions());
+const s3 = new S3(getOptions());
 const {
     NEW_USERS_QUEUE_URL, USER_IMPORT_CLOUDWATCH_ROLE_ARN,
     USER_IMPORT_JOB_MAPPING_FILES_BUCKET, SEND_METRIC, METRICS_ANONYMOUS_UUID,
@@ -44,7 +52,7 @@ exports.handler = async (event, context) => {
         throw new Error('Unable to determine the new user pool ID');
     }
 
-    if (Context && Context.State) {
+    if (Context?.State) {
         StateName = Context.State.Name;
         result.StateName = StateName;
     }
@@ -52,11 +60,11 @@ exports.handler = async (event, context) => {
     switch (StateName) {
         case 'ImportNewUsers':
         case 'Parallel: ImportNewUsers':
-            result = { ...result, ... await importUsers(context, newUserPoolId) };
+            result = { ...result, ... (await importUsers(context, newUserPoolId)) };
             break;
         case 'CheckUserImportJob':
         case 'Parallel: CheckUserImportJob':
-            result = { ...result, ... await checkUserImportJob(Input.ImportJobId, newUserPoolId) };
+            result = { ...result, ... (await checkUserImportJob(Input.ImportJobId, newUserPoolId)) };
             break;
         default:
             throw new Error(`Unknown StateName: ${StateName}`);
@@ -66,65 +74,83 @@ exports.handler = async (event, context) => {
     return { result };
 };
 
+
+
+let numNewUsersToImport;
+let userImportCSVHeaders;
+let userImportCSV;
+let userImportCSVByteSize;
+let maxUploadByteSizeReached;
+let userImportMappingFile;
+
+async function checkCSVHeaders(newUserPoolId){
+    if (!userImportCSVHeaders || userImportCSVHeaders.length === 0) {
+        userImportCSVHeaders = await getCSVHeader(newUserPoolId);
+        userImportCSV += formatCsvHeader(userImportCSVHeaders);
+        userImportCSVByteSize += Buffer.byteLength(userImportCSV);
+        maxUploadByteSizeReached = (userImportCSVByteSize >= maxUploadByteSize);
+    }
+}
+
+async function processReceivedMessages(newUserPoolId, receiveMessageResult, output){
+    if (receiveMessageResult.Messages?.length > 0) {
+        console.log(`Read ${receiveMessageResult.Messages.length} message(s) off the queue`);
+        output.QueueEmpty = false;
+        const deleteMessageBatchParams = { QueueUrl: NEW_USERS_QUEUE_URL, Entries: [] };
+
+        await checkCSVHeaders(newUserPoolId);
+
+        for (const message of receiveMessageResult.Messages) {
+            const userData = JSON.parse(message.Body);
+            const userCSVLine = formatUserToCsvLine(userImportCSVHeaders, userData);
+            const lineSize = Buffer.byteLength(userCSVLine);
+
+            //Check if adding the next line will put the upload over the limit
+            if (!maxUploadByteSizeReached) {
+                maxUploadByteSizeReached = (lineSize + userImportCSVByteSize) >= maxUploadByteSize;
+            }
+
+            if ((!maxUploadByteSizeReached) && (numNewUsersToImport < maxUserImportCSV)) {
+                userImportCSV += userCSVLine;
+                userImportCSVByteSize += lineSize;
+                userImportMappingFile += `${numNewUsersToImport + 1},${getUserSub(userData)}\n`;
+                numNewUsersToImport++;
+                deleteMessageBatchParams.Entries.push({ Id: message.MessageId, ReceiptHandle: message.ReceiptHandle });
+            }
+        }
+
+        if (deleteMessageBatchParams.Entries.length > 0) {
+            console.log(`Deleting a batch of ${deleteMessageBatchParams.Entries.length} message(s) from the New User Queue`);
+            await sqs.deleteMessageBatch(deleteMessageBatchParams);
+            console.log('Message batch deleted');
+        }
+    } else {
+        console.log('No messages in queue');
+        output.QueueEmpty = true;
+    }
+}
 /**
  * Reads messages from the New Users Queue and creates a CSV import job to add them to the primary user pool
  * @param {object} context Lambda context
  * @param {string} newUserPoolId The ID of the import user pool
  */
 const importUsers = async (context, newUserPoolId) => {
+
     const output = { ImportJobStatus: '', QueueEmpty: true };
-    let numNewUsersToImport = 0;
-    let userImportCSVHeaders = [];
-    let userImportCSV = '';
-    let userImportCSVByteSize = 0;
-    let maxUploadByteSizeReached = (userImportCSVByteSize < maxUploadByteSize);
-    let userImportMappingFile = 'userImportCsvLineNumber,userSub\n';
+    numNewUsersToImport = 0;
+    userImportCSVHeaders = [];
+    userImportCSV = '';
+    userImportCSVByteSize = 0;
+    maxUploadByteSizeReached = (userImportCSVByteSize < maxUploadByteSize);
+    userImportMappingFile = 'userImportCsvLineNumber,userSub\n';
 
     do {
         const receiveMessageParams = { QueueUrl: NEW_USERS_QUEUE_URL, MaxNumberOfMessages: 10, WaitTimeSeconds: 20 };
         console.log(`Getting messages off New Users Queue: ${JSON.stringify(receiveMessageParams)}`);
-        const receiveMessageResult = await sqs.receiveMessage(receiveMessageParams).promise();
+        const receiveMessageResult = await sqs.receiveMessage(receiveMessageParams);
 
-        if (receiveMessageResult.Messages && receiveMessageResult.Messages.length > 0) {
-            console.log(`Read ${receiveMessageResult.Messages.length} message(s) off the queue`);
-            output.QueueEmpty = false;
-            const deleteMessageBatchParams = { QueueUrl: NEW_USERS_QUEUE_URL, Entries: [] };
-            if (!userImportCSVHeaders || userImportCSVHeaders.length === 0) {
-                userImportCSVHeaders = await getCSVHeader(newUserPoolId);
-                userImportCSV += formatCsvHeader(userImportCSVHeaders);
-                userImportCSVByteSize += Buffer.byteLength(userImportCSV);
-                maxUploadByteSizeReached = (userImportCSVByteSize >= maxUploadByteSize);
-            }
+        await processReceivedMessages(newUserPoolId, receiveMessageResult, output);
 
-            for (let i = 0; i < receiveMessageResult.Messages.length; i++) {
-                const message = receiveMessageResult.Messages[i];
-                const userData = JSON.parse(message.Body);
-                const userCSVLine = formatUserToCsvLine(userImportCSVHeaders, userData);
-                const lineSize = Buffer.byteLength(userCSVLine);
-
-                //Check if adding the next line will put the upload over the limit
-                if (!maxUploadByteSizeReached) {
-                    maxUploadByteSizeReached = (lineSize + userImportCSVByteSize) >= maxUploadByteSize;
-                }
-
-                if ((numNewUsersToImport < maxUserImportCSV) && !maxUploadByteSizeReached) {
-                    userImportCSV += userCSVLine;
-                    userImportCSVByteSize += lineSize;
-                    userImportMappingFile += `${numNewUsersToImport + 1},${getUserSub(userData)}\n`;
-                    numNewUsersToImport++;
-                    deleteMessageBatchParams.Entries.push({ Id: message.MessageId, ReceiptHandle: message.ReceiptHandle });
-                }
-            }
-
-            if (deleteMessageBatchParams.Entries.length > 0) {
-                console.log(`Deleting a batch of ${deleteMessageBatchParams.Entries.length} message(s) from the New User Queue`);
-                await sqs.deleteMessageBatch(deleteMessageBatchParams).promise();
-                console.log('Message batch deleted');
-            }
-        } else {
-            console.log('No messages in queue');
-            output.QueueEmpty = true;
-        }
     } while (!output.QueueEmpty && !maxUploadByteSizeReached && numNewUsersToImport < maxUserImportCSV && context.getRemainingTimeInMillis() > oneMinuteInMS);
 
     if (numNewUsersToImport > 0) {
@@ -146,7 +172,7 @@ const importUsers = async (context, newUserPoolId) => {
 const getCSVHeader = async (newUserPoolId) => {
     const params = { UserPoolId: newUserPoolId };
     console.log(`Getting CSV Header: ${JSON.stringify(params)}`);
-    const response = await cognitoISP.getCSVHeader(params).promise();
+    const response = await cognitoISP.getCSVHeader(params);
     console.log(`Got CSV Header: ${JSON.stringify(response)}`);
     return response.CSVHeader;
 };
@@ -235,7 +261,7 @@ const runUserImportJob = async (csv, userImportMappingFile, newUserPoolId) => {
     };
 
     console.log(`Creating user import job: ${JSON.stringify(createUserImportJobParams)}`);
-    const createUserImportJobResponse = await cognitoISP.createUserImportJob(createUserImportJobParams).promise();
+    const createUserImportJobResponse = await cognitoISP.createUserImportJob(createUserImportJobParams);
     console.log(`User import job created`);
 
     const { JobId, PreSignedUrl } = createUserImportJobResponse.UserImportJob;
@@ -246,7 +272,7 @@ const runUserImportJob = async (csv, userImportMappingFile, newUserPoolId) => {
         Key: `${JobId}-user-mapping.csv`,
         ServerSideEncryption: 'AES256',
         Body: userImportMappingFile
-    }).promise();
+    });
     console.log('User import job mapping file uploaded');
 
     console.log('Uploading CSV for user import job...');
@@ -266,7 +292,7 @@ const runUserImportJob = async (csv, userImportMappingFile, newUserPoolId) => {
         try {
             const startUserImportJobParams = { UserPoolId: newUserPoolId, JobId: JobId };
             console.log(`Starting user import job: ${JSON.stringify(startUserImportJobParams)}`);
-            const startUserImportJobResponse = await cognitoISP.startUserImportJob(startUserImportJobParams).promise();
+            const startUserImportJobResponse = await cognitoISP.startUserImportJob(startUserImportJobParams);
             Status = startUserImportJobResponse.UserImportJob.Status;
             console.log(`User import job started: ${JobId} (${Status})`);
             jobStarted = true;
@@ -295,7 +321,7 @@ const checkUserImportJob = async (jobId, newUserPoolId) => {
     };
 
     console.log(`Describing user import job: ${JSON.stringify(describeUserImportJobParams)}`);
-    const response = await cognitoISP.describeUserImportJob(describeUserImportJobParams).promise();
+    const response = await cognitoISP.describeUserImportJob(describeUserImportJobParams);
     console.log(JSON.stringify(response));
 
     if (response.UserImportJob) {

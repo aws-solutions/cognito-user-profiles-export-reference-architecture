@@ -4,14 +4,12 @@
 /**
  * @author Solution Builders
  */
+const { mockClient } = require('aws-sdk-client-mock');
+const { CognitoIdentityProvider, ListUsersInGroupCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const mockCognitoISP = mockClient(CognitoIdentityProvider);
 
-const mockCognitoISP = {
-    listUsersInGroup: jest.fn()
-};
-
-const mockDocClient = {
-    batchWrite: jest.fn()
-};
+const { DynamoDBDocumentClient, BatchWriteCommand } = require("@aws-sdk/lib-dynamodb");
+const mockDocClient = mockClient(DynamoDBDocumentClient);
 
 // Mock context
 const context = {
@@ -20,19 +18,6 @@ const context = {
         return 100000;
     }
 };
-
-jest.mock('aws-sdk', () => {
-    return {
-        CognitoIdentityServiceProvider: jest.fn(() => ({
-            listUsersInGroup: mockCognitoISP.listUsersInGroup
-        })),
-        DynamoDB: {
-            DocumentClient: jest.fn(() => ({
-                batchWrite: mockDocClient.batchWrite
-            }))
-        }
-    };
-});
 
 beforeAll(() => {
     process.env = Object.assign(process.env, {
@@ -44,23 +29,12 @@ beforeAll(() => {
 
 describe('export-users-in-group', () => {
     beforeEach(() => {
-        for (const mockFn in mockCognitoISP) {
-            mockCognitoISP[mockFn].mockReset();
-        }
-
-        for (const mockFn in mockDocClient) {
-            mockDocClient[mockFn].mockReset();
-        }
+        mockCognitoISP.reset();
+        mockDocClient.reset();
     });
 
     it('Should return when no users are returned', async function () {
-        mockCognitoISP.listUsersInGroup.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockCognitoISP.on(ListUsersInGroupCommand).resolvesOnce({});
 
         const event = {
             groupName: 'group-name',
@@ -79,32 +53,20 @@ describe('export-users-in-group', () => {
     });
 
     it('Should return when only external provider users are returned', async function () {
-        mockCognitoISP.listUsersInGroup
-        .mockImplementationOnce(()=>{
-            return {
-                promise() {
-                    return Promise.reject({
-                        retryable: true,
-                        message: 'retryable message'
-                    });
-                }
-            };
+        mockCognitoISP.on(ListUsersInGroupCommand)
+        .rejectsOnce({
+            retryable: true,
+            message: 'retryable message'
         })
-        .mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Users: [{
-                            Username: 'name',
-                            UserStatus: 'EXTERNAL_PROVIDER',
-                            Attributes:[{
-                                Name: 'sub',
-                                Value: 'uuid'
-                            }]
-                        }]
-                    });
-                }
-            };
+        .resolvesOnce({
+            Users: [{
+                Username: 'name',
+                UserStatus: 'EXTERNAL_PROVIDER',
+                Attributes:[{
+                    Name: 'sub',
+                    Value: 'uuid'
+                }]
+            }]
         });
 
         const event = {
@@ -129,34 +91,74 @@ describe('export-users-in-group', () => {
             exportTimestamp: new Date().getTime()
         };
 
-        mockCognitoISP.listUsersInGroup.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Users: [{
-                            Username: 'user-name',
-                            Attributes:[{
-                                Name: 'sub',
-                                Value: 'uuid'
-                            }],
-                            Enabled: true,
-                            UserStatus: 'CONFIRMED'
-                        }],
-                        NextToken: 'next-token'
-                    });
-                }
-            };
+        mockCognitoISP.on(ListUsersInGroupCommand).resolvesOnce({
+            Users: [{
+                Username: 'user-name',
+                Attributes:[{
+                    Name: 'sub',
+                    Value: 'uuid'
+                }],
+                Enabled: true,
+                UserStatus: 'CONFIRMED'
+            }],
+            NextToken: 'next-token'
         });
 
-        mockDocClient.batchWrite.mockImplementation(() => {
-            return {
-                promise() {
-                    return Promise.resolve({UnprocessedItems:{
-                        'backup-table': []
-                    }});
-                }
-            };
+        mockDocClient.on(BatchWriteCommand).resolves({UnprocessedItems:{
+            'backup-table': []
+        }});
+
+        const lambda = require('../export-users-in-group');
+        context.getRemainingTimeInMillis = function(){return 1000;};
+        const resp = await lambda.handler(event, context);
+
+        expect(resp).toEqual({
+            exportTimestamp: event.exportTimestamp,
+            groupName: 'group-name',
+            processedAllUsersInGroup: 'No',
+            listUsersInGroupNextToken: 'next-token'
         });
+    });
+
+
+});
+
+describe('import-new-users: Reseting', function(){
+
+
+    beforeEach(() => {
+        jest.resetModules();        
+        process.env = Object.assign(process.env, { COGNITO_TPS: '0' });
+    });
+
+    it('Waits when cognitoApiCallCount >= cognitoTPS', async function () {
+        const { CognitoIdentityProvider, ListUsersInGroupCommand } = require("@aws-sdk/client-cognito-identity-provider");
+        const mockCognitoISP2 = mockClient(CognitoIdentityProvider);
+
+        const { DynamoDBDocumentClient, BatchWriteCommand } = require("@aws-sdk/lib-dynamodb");
+        const mockDocClient2 = mockClient(DynamoDBDocumentClient);
+
+        const event = {
+            groupName: 'group-name',
+            exportTimestamp: new Date().getTime()
+        };
+
+        mockCognitoISP2.on(ListUsersInGroupCommand).resolvesOnce({
+            Users: [{
+                Username: 'user-name',
+                Attributes:[{
+                    Name: 'sub',
+                    Value: 'uuid'
+                }],
+                Enabled: true,
+                UserStatus: 'CONFIRMED'
+            }],
+            NextToken: 'next-token'
+        });
+
+        mockDocClient2.on(BatchWriteCommand).resolves({UnprocessedItems:{
+            'backup-table': []
+        }});
 
         const lambda = require('../export-users-in-group');
         context.getRemainingTimeInMillis = function(){return 1000;};
@@ -171,6 +173,50 @@ describe('export-users-in-group', () => {
     });
 });
 
+
+
+
+
+describe('groups-invalid UsernameAttributes', function () {
+
+    it('should throw an error - event does not include valid UsernameAttributes', async () => {
+    
+
+        mockCognitoISP.on(ListUsersInGroupCommand).resolvesOnce({
+            Users: [{
+                Username: 'user-name',
+                Attributes:[{
+                    Name: 'sub',
+                    Value: 'uuid'
+                }],
+                Enabled: true,
+                UserStatus: 'CONFIRMED'
+            }],
+            NextToken: 'next-token'
+        });
+
+        mockDocClient.on(BatchWriteCommand).resolves({UnprocessedItems:{
+            'backup-table': []
+        }});
+
+      const event = { 
+        UsernameAttributes: '{"string":true, "string":42}',
+        paginationToken: 'string',
+        groupName: 'group-name',
+        exportTimestamp: new Date().getTime()
+      };
+      const context = {
+        getRemainingTimeInMillis: function () {
+          return 100000;
+        }
+      };
+      const lambda = require('../export-users-in-group');
+      await expect(async () => {
+            await lambda.handler(event, context);
+        }).rejects.toThrow('Cannot read properties of undefined (reading \'Users\')');
+    });
+})
+
 describe('groups-invalid CognitoTPS', function () {
     beforeEach(() => {
         jest.resetModules();
@@ -184,4 +230,6 @@ describe('groups-invalid CognitoTPS', function () {
             await lambda.handler(event);
         }).rejects.toThrow('Unable to parse a number from the COGNITO_TPS value (invalid)');
     });
+
+
 });

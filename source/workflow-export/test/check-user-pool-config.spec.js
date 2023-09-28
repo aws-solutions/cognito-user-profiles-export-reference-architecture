@@ -6,20 +6,10 @@
  */
 
 // Mock AWS SDK
-const mockCognitoISP = {
-  getUserPoolMfaConfig: jest.fn(),
-  describeUserPool: jest.fn()
-};
 
-jest.mock('aws-sdk', () => {
-  return {
-    CognitoIdentityServiceProvider: jest.fn(() => ({
-      getUserPoolMfaConfig: mockCognitoISP.getUserPoolMfaConfig,
-      describeUserPool: mockCognitoISP.describeUserPool
-    }))
-  };
-});
-
+const { mockClient } = require('aws-sdk-client-mock');
+const { CognitoIdentityProvider, DescribeUserPoolCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const mockCognitoISP = mockClient(CognitoIdentityProvider);
 
 describe('check-user-pool-config', function () {
   beforeEach(() => {
@@ -28,24 +18,15 @@ describe('check-user-pool-config', function () {
     process.env.BACKUP_USER_POOL_ID = 'backup-user-pool-id';
     process.env.AWS_REGION = 'us-east-1';
     process.env.BACKUP_REGION = 'us-east-2';
-
-    for (const mockFn in mockCognitoISP) {
-      mockCognitoISP[mockFn].mockReset();
-    }
+    mockCognitoISP.reset();
   });
 
   it('Should return the user pool Username attributes', async function () {
-    mockCognitoISP.describeUserPool.mockImplementationOnce(() => {
-      return {
-        promise() {
-          return Promise.resolve({
-            UserPool: {
-              MfaConfiguration: 'OFF',
-              UsernameAttributes: ['email']
-            }
-          });
-        }
-      };
+    mockCognitoISP.on(DescribeUserPoolCommand).resolvesOnce({
+      UserPool: {
+        MfaConfiguration: 'OFF',
+        UsernameAttributes: ['email']
+      }
     });
 
     const event = {};
@@ -55,16 +36,10 @@ describe('check-user-pool-config', function () {
   });
 
   it('Should should handle user pools with no Username attributes', async function () {
-    mockCognitoISP.describeUserPool.mockImplementationOnce(() => {
-      return {
-        promise() {
-          return Promise.resolve({
-            UserPool: {
-              MfaConfiguration: 'OFF'
-            }
-          });
-        }
-      };
+    mockCognitoISP.on(DescribeUserPoolCommand).resolvesOnce({
+      UserPool: {
+        MfaConfiguration: 'OFF'
+      }
     });
 
     const event = {};
@@ -74,17 +49,11 @@ describe('check-user-pool-config', function () {
   });
 
   it('Should return false if MFA is enabled', async function () {
-    mockCognitoISP.describeUserPool.mockImplementationOnce(() => {
-      return {
-        promise() {
-          return Promise.resolve({
-            UserPool: {
-              MfaConfiguration: 'OPTIONAL',
-              UsernameAttributes: ['phone', 'email']
-            }
-          });
-        }
-      };
+    mockCognitoISP.on(DescribeUserPoolCommand).resolvesOnce({
+      UserPool: {
+        MfaConfiguration: 'OPTIONAL',
+        UsernameAttributes: ['phone', 'email']
+      }
     });
 
     const event = {};
@@ -95,17 +64,11 @@ describe('check-user-pool-config', function () {
   });
 
   it('Should return false if multiple username attributes are allowed', async function () {
-    mockCognitoISP.describeUserPool.mockImplementationOnce(() => {
-      return {
-        promise() {
-          return Promise.resolve({
-            UserPool: {
-              MfaConfiguration: 'OFF',
-              UsernameAttributes: ['phone', 'email']
-            }
-          });
-        }
-      };
+    mockCognitoISP.on(DescribeUserPoolCommand).resolvesOnce({
+      UserPool: {
+        MfaConfiguration: 'OFF',
+        UsernameAttributes: ['phone', 'email']
+      }
     });
 
     const event = {};

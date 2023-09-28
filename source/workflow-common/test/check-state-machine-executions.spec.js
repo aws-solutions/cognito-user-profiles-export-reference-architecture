@@ -6,25 +6,19 @@
  */
 
 // Mock AWS SDK
-const mockStepFunctions = jest.fn();
-const mockAWS = require('aws-sdk');
-mockAWS.StepFunctions = jest.fn(() => ({
-  listExecutions: mockStepFunctions
-}));
+
+const { mockClient } = require('aws-sdk-client-mock');
+const { SFN, ListExecutionsCommand } = require("@aws-sdk/client-sfn");
+const mockStepFunctions = mockClient(SFN);
 
 describe('check-state-machine-executions', function () {
-  beforeEach(() => { mockStepFunctions.mockReset(); });
+  beforeEach(() => { 
+    mockStepFunctions.reset(); 
+  });
 
   it('Should return true if there is only one execution running', async function () {
-    mockStepFunctions.mockImplementationOnce(() => {
-      return {
-        promise() {
-          // stepFunctions.listExecutions
-          return Promise.resolve({
-            executions: [{ executionArn: 'execution-id' }]
-          });
-        }
-      };
+    mockStepFunctions.on(ListExecutionsCommand).resolvesOnce({
+      executions: [{ executionArn: 'execution-id' }]
     });
 
     const event = {
@@ -40,15 +34,8 @@ describe('check-state-machine-executions', function () {
   });
 
   it('Should return false if there is no executions are returned', async function () {
-    mockStepFunctions.mockImplementationOnce(() => {
-      return {
-        promise() {
-          // stepFunctions.listExecutions
-          return Promise.resolve({
-            executions: []
-          });
-        }
-      };
+    mockStepFunctions.on(ListExecutionsCommand).resolvesOnce({
+      executions: []
     });
 
     const event = {
@@ -64,15 +51,8 @@ describe('check-state-machine-executions', function () {
   });
 
   it('Should return false if there are more than one executions returned', async function () {
-    mockStepFunctions.mockImplementationOnce(() => {
-      return {
-        promise() {
-          // stepFunctions.listExecutions
-          return Promise.resolve({
-            executions: [{ executionArn: 'execution-id' }, { executionArn: 'execution-id-2' }]
-          });
-        }
-      };
+    mockStepFunctions.on(ListExecutionsCommand).resolvesOnce({
+      executions: [{ executionArn: 'execution-id' }, { executionArn: 'execution-id-2' }]
     });
 
     const event = {
@@ -88,15 +68,8 @@ describe('check-state-machine-executions', function () {
   });
 
   it('Should return false if the execution ID doesn\'t match the event', async function () {
-    mockStepFunctions.mockImplementationOnce(() => {
-      return {
-        promise() {
-          // stepFunctions.listExecutions
-          return Promise.resolve({
-            executions: [{ executionArn: 'other-execution-id' }]
-          });
-        }
-      };
+    mockStepFunctions.on(ListExecutionsCommand).resolvesOnce({
+      executions: [{ executionArn: 'other-execution-id' }]
     });
 
     const event = {

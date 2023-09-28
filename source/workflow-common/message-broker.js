@@ -7,14 +7,23 @@
 
 const { getOptions } = require('../utils/metrics');
 
-const AWS = require('aws-sdk');
-const sns = new AWS.SNS(getOptions());
-const docClient = new AWS.DynamoDB.DocumentClient(getOptions());
+const {
+          DynamoDBClient
+      } = require("@aws-sdk/client-dynamodb"),
+      {
+          SNS
+      } = require("@aws-sdk/client-sns"),
+      { 
+        DynamoDBDocumentClient, PutCommand
+      } = require("@aws-sdk/lib-dynamodb");
+const sns = new SNS(getOptions());
+const dynamodbClient = new DynamoDBClient(getOptions());
+const docClient = DynamoDBDocumentClient.from(dynamodbClient);
 const { BACKUP_TABLE_NAME, TYPE_TIMESTAMP, SNS_MESSAGE_PREFERENCE, SEND_METRIC, METRICS_ANONYMOUS_UUID, SOLUTION_ID, SOLUTION_VERSION, AWS_REGION, IS_PRIMARY_REGION, NOTIFICATION_TOPIC } = process.env;
 const { sendAnonymousMetric } = require('../utils/metrics');
 
 /**
- * Publishes info and error messages to the solution's SNS topic and if enabled, sends anonymous operational metrics
+ * Publishes info and error messages to the solution's SNS topic and if enabled, sends anonymized operational metrics
  * @param {object} event 
  */
 exports.handler = async (event) => {
@@ -86,12 +95,12 @@ const handleError = async (Context, Input) => {
  */
 const publishMessage = async (msg) => {
     console.log('Publishing message to notification topic');
-    await sns.publish({ TopicArn: NOTIFICATION_TOPIC, Message: msg }).promise();
+    await sns.publish({ TopicArn: NOTIFICATION_TOPIC, Message: msg });
     console.log('Message published');
 };
 
 /**
- * Sends anonymous operational metric
+ * Sends anonymized operational metric
  * @param {object} payload Metric data
  */
 const sendMetric = async (payload) => {
@@ -159,7 +168,7 @@ const updateLatestExportTimestamp = async (exportTimestamp) => {
     };
 
     console.log(`Updating latest export timestamp: ${JSON.stringify(putParams)}`);
-    await docClient.put(putParams).promise();
+    await docClient.send(new PutCommand(putParams));
     console.log('Latest export timestamp updated');
 };
 
