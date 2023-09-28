@@ -6,8 +6,10 @@
  */
 
 const { getOptions } = require('../utils/metrics');
-const AWS = require('aws-sdk');
-const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
+const {
+    CognitoIdentityProvider: CognitoIdentityServiceProvider
+} = require("@aws-sdk/client-cognito-identity-provider");
+const cognitoISP = new CognitoIdentityServiceProvider(getOptions());
 const HelperFunctions = require('../utils/helper-functions');
 
 /**
@@ -31,7 +33,7 @@ exports.handler = async (event) => {
     }
 
     console.log(`Listing groups: ${JSON.stringify(listGroupsParams)}`);
-    const response = await cognitoISP.listGroups(listGroupsParams).promise();
+    const response = await cognitoISP.listGroups(listGroupsParams);
 
     if (response.Groups) {
         console.log(`Number of groups returned: ${response.Groups.length}`);
@@ -53,7 +55,12 @@ exports.handler = async (event) => {
     const output = { ExportTimestamp: functionData.ExportTimestamp, NumGroupsToProcess: groups.length, Groups: [...groups], ListGroupsNextToken: response.NextToken };
 
     // Check to see if there are more groups to fetch
-    output.ListGroupsNextToken ? output.ProcessedAllGroups = 'No' : output.ProcessedAllGroups = 'Yes';
+    if (output.ListGroupsNextToken){
+        output.ProcessedAllGroups = 'No'
+    }
+    else{
+        output.ProcessedAllGroups = 'Yes';
+    }
 
     console.log(`Output: ${JSON.stringify(output)}`);
     return output;

@@ -6,9 +6,14 @@
  */
 
 const { getOptions } = require('../utils/metrics');
-const AWS = require('aws-sdk');
-const dynamodb = new AWS.DynamoDB(getOptions());
-const stepFunctions = new AWS.StepFunctions(getOptions());
+const {
+        DynamoDB
+      } = require("@aws-sdk/client-dynamodb"),
+      {
+        SFN: StepFunctions
+      } = require("@aws-sdk/client-sfn");
+const dynamodb = new DynamoDB(getOptions());
+const stepFunctions = new StepFunctions(getOptions());
 const axios = require('axios');
 
 /**
@@ -73,7 +78,7 @@ async function createGlobalTable(properties) {
           Create: { RegionName: SecondaryRegion }
         }
       ]
-    }).promise();
+    });
   } catch (error) {
     console.error(`Error occurred while creating global table in ${SecondaryRegion}.`);
     throw error;
@@ -91,7 +96,7 @@ async function startStepFunction(stateMachineArn, input) {
     return await stepFunctions.startExecution({
       stateMachineArn,
       input
-    }).promise();
+    });
   } catch (error) {
     console.error('Error occurred while starting step function.');
     throw error;

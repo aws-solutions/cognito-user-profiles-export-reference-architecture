@@ -8,8 +8,10 @@
 const { getOptions } = require('../utils/metrics');
 const { PRIMARY_USER_POOL_ID } = process.env;
 
-const AWS = require('aws-sdk');
-const cognitoISP = new AWS.CognitoIdentityServiceProvider(getOptions());
+const {
+    CognitoIdentityProvider: CognitoIdentityServiceProvider
+} = require("@aws-sdk/client-cognito-identity-provider");
+const cognitoISP = new CognitoIdentityServiceProvider(getOptions());
 
 /**
  * Checks the configuration of the primary user pool to ensure it is supported by the solution
@@ -21,7 +23,7 @@ exports.handler = async (event) => {
 
     const describeUserPoolParams = { UserPoolId: PRIMARY_USER_POOL_ID };
     console.log(`Describing user pool: ${JSON.stringify(describeUserPoolParams)}`);
-    const describeUserPoolResponse = await cognitoISP.describeUserPool(describeUserPoolParams).promise();
+    const describeUserPoolResponse = await cognitoISP.describeUserPool(describeUserPoolParams);
     console.log(`Describe user pool response: ${JSON.stringify(describeUserPoolResponse, null, 2)}`);
 
     if (describeUserPoolResponse.UserPool.MfaConfiguration && describeUserPoolResponse.UserPool.MfaConfiguration !== 'OFF') {

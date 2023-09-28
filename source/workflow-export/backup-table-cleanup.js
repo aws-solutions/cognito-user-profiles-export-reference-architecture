@@ -6,9 +6,18 @@
  */
 
 const { getOptions } = require('../utils/metrics');
-const AWS = require('aws-sdk');
-const docClient = new AWS.DynamoDB.DocumentClient(getOptions());
-const sqs = new AWS.SQS(getOptions());
+const {
+        DynamoDBClient
+      } = require("@aws-sdk/client-dynamodb"),
+      {
+          SQS
+      } = require("@aws-sdk/client-sqs"),
+      { 
+        DynamoDBDocumentClient, BatchWriteCommand, ScanCommand
+      } = require("@aws-sdk/lib-dynamodb");
+const dynamodbClient = new DynamoDBClient(getOptions());
+const docClient = DynamoDBDocumentClient.from(dynamodbClient);
+const sqs = new SQS(getOptions());
 const uuid = require('uuid');
 const { BACKUP_TABLE_NAME, QUEUE_URL } = process.env;
 const oneMinuteInMS = 60 * 1000;
@@ -71,7 +80,7 @@ const findItemsToCleanup = async (Input, lambdaContext) => {
 
     do {
         console.log('Scanning table...');
-        const scanResponse = await docClient.scan(scanParams).promise();
+        const scanResponse = await docClient.send(new ScanCommand(scanParams));
         console.log(`Retrieved ${scanResponse.Count} item(s). Scanned ${scanResponse.ScannedCount} item(s)`);
 
         if (scanResponse.Count > 0) {
@@ -106,7 +115,7 @@ const sendItemsToQueue = async (items) => {
         };
 
         console.log(`Adding batch of ${sendMessageBatchParams.Entries.length} message(s) to the Export Workflow queue`);
-        await sqs.sendMessageBatch(sendMessageBatchParams).promise();
+        await sqs.sendMessageBatch(sendMessageBatchParams);
         console.log('Message(s) added to the Export Workflow queue');
     }
 };
@@ -126,7 +135,7 @@ const readMessagesInQueue = async (lambdaContext) => {
 
     do {
         console.log(`Receiving messages from queue: ${JSON.stringify(receiveMessageParams)}`);
-        const response = await sqs.receiveMessage(receiveMessageParams).promise();
+        const response = await sqs.receiveMessage(receiveMessageParams);
         if (response.Messages && response.Messages.length > 0) {
             numEmptyResponses = 0;
             console.log(`Received ${response.Messages.length} message(s)`);
@@ -166,7 +175,7 @@ const removeItemsFromBackupTable = async (messages) => {
     let resp;
     do {
         console.log(`Going to delete ${batchWriteParams.RequestItems[BACKUP_TABLE_NAME].length} records(s) from ${BACKUP_TABLE_NAME}`);
-        resp = await docClient.batchWrite(batchWriteParams).promise();
+        resp = await docClient.send(new BatchWriteCommand(batchWriteParams));
         if (resp.UnprocessedItems[BACKUP_TABLE_NAME] !== undefined && resp.UnprocessedItems[BACKUP_TABLE_NAME].length > 0) {
             console.log(`Detected ${resp.UnprocessedItems[BACKUP_TABLE_NAME].length} unprocessed item(s). Waiting 100 ms then processing again`);
             batchWriteParams.RequestItems[BACKUP_TABLE_NAME] = resp.UnprocessedItems[BACKUP_TABLE_NAME];
@@ -193,6 +202,6 @@ const deleteMessagesFromQueue = async (messages) => {
     });
 
     console.log(`Deleting a batch of ${deleteMessageBatchParams.Entries.length} message(s) from the queue`);
-    await sqs.deleteMessageBatch(deleteMessageBatchParams).promise();
+    await sqs.deleteMessageBatch(deleteMessageBatchParams);
     console.log('Message batch deleted');
 };

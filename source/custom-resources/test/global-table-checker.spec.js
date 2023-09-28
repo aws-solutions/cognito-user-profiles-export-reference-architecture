@@ -9,6 +9,10 @@
 const axios = require('axios');
 const MockAdapter = require('axios-mock-adapter');
 const axiosMock = new MockAdapter(axios);
+const { mockClient } = require('aws-sdk-client-mock');
+const {
+  DynamoDBClient, DescribeTableCommand, ResourceNotFoundException, InternalServerError
+} = require("@aws-sdk/client-dynamodb");
 
 // Mock axios
 axiosMock.onPut('/cfn-response').reply(200);
@@ -21,15 +25,7 @@ const context = {
   }
 };
 
-// Mock AWS SDK
-const mockDynamoDB = jest.fn();
-jest.mock('aws-sdk', () => {
-  return {
-    DynamoDB: jest.fn(() => ({
-      describeTable: mockDynamoDB
-    }))
-  };
-});
+const mockDynamoDB = mockClient(DynamoDBClient);
 
 describe('global-table-checker', function() {
   // Mock event data
@@ -97,29 +93,15 @@ describe('global-table-checker', function() {
     process.env.SECONDARY_REGION = 'mock-region';
     process.env.USER_POOL_TABLE = 'mock-table';
 
-    mockDynamoDB.mockReset();
+    mockDynamoDB.reset();
   });
 
   // No resource, and return
   it('should return stream ARN when DynamoDB global table is not ready at first, but ready secondly', async function() {
-    mockDynamoDB.mockImplementationOnce(() => {
-      return {
-        promise() {
-          // dynamodb.describeTable
-          return Promise.reject({
-            code: 'ResourceNotFoundException',
+
+    mockDynamoDB.on(DescribeTableCommand).rejectsOnce(new ResourceNotFoundException({
             message: 'Table: mock-table not found'
-          });
-        }
-      };
-    }).mockImplementationOnce(() => {
-      return {
-        promise() {
-          // dynamodb.describeTable
-          return Promise.resolve(describeTableResponse);
-        }
-      };
-    });
+          })).resolvesOnce(describeTableResponse)
 
     const index = require('../global-table-checker');
     const result = await index.handler(event, context);
@@ -135,21 +117,7 @@ describe('global-table-checker', function() {
 
   // Resource, and return
   it('should return stream ARN when DynamoDB global table is ready without stream ARN firstly, but ready secondly', async function() {
-    mockDynamoDB.mockImplementationOnce(() => {
-      return {
-        promise() {
-          // dynamodb.describeTable
-          return Promise.resolve({ Table: {} });
-        }
-      };
-    }).mockImplementationOnce(() => {
-      return {
-        promise() {
-          // dynamodb.describeTable
-          return Promise.resolve(describeTableResponse);
-        }
-      };
-    });
+    mockDynamoDB.on(DescribeTableCommand).resolvesOnce({ Table: {} }).resolvesOnce(describeTableResponse)
 
     const index = require('../global-table-checker');
     const result = await index.handler(event, context);
@@ -163,23 +131,15 @@ describe('global-table-checker', function() {
     });
   });
 
-  // No resource, but timeout
+  // // No resource, but timeout
   it('should return empty stream ARN when DynamoDB global table is not ready and Lambda times out', async function() {
     context.getRemainingTimeInMillis = function() {
       return 1000;
     };
 
-    mockDynamoDB.mockImplementation(() => {
-      return {
-        promise() {
-          // dynamodb.describeTable
-          return Promise.reject({
-            code: 'ResourceNotFoundException',
-            message: 'Table: mock-table not found'
-          });
-        }
-      };
-    });
+    mockDynamoDB.on(DescribeTableCommand).rejects(new ResourceNotFoundException({
+      message: 'Table: mock-table not found'
+    }));
 
     const index = require('../global-table-checker');
     const result = await index.handler(event, context);
@@ -193,20 +153,13 @@ describe('global-table-checker', function() {
     });
   });
 
-  // Resource, but timeout
+  // // Resource, but timeout
   it('should return empty stream ARN when DynamoDB global table is ready without stream ARN and Lambda times out', async function() {
     context.getRemainingTimeInMillis = function() {
       return 1000;
     };
 
-    mockDynamoDB.mockImplementation(() => {
-      return {
-        promise() {
-          // dynamodb.describeTable
-          return Promise.resolve({ Table: {} });
-        }
-      };
-    });
+    mockDynamoDB.on(DescribeTableCommand).resolves({ Table: {} });
 
     const index = require('../global-table-checker');
     const result = await index.handler(event, context);
@@ -220,32 +173,20 @@ describe('global-table-checker', function() {
     });
   });
 
-  // error
+  // // error
   it('should throw error when unexpected error occurs', async function() {
     context.getRemainingTimeInMillis = function() {
       return 100000;
     };
 
-    mockDynamoDB.mockImplementation(() => {
-      return {
-        promise() {
-          // dynamodb.describeTable
-          return Promise.reject({
-            code: 'UnexpectedException',
-            message: 'Unexpected exception'
-          });
-        }
-      };
-    });
+    mockDynamoDB.on(DescribeTableCommand).rejects(new InternalServerError({message: 'test error'}))
 
     const index = require('../global-table-checker');
     try {
       await index.handler(event, context);
     } catch (error) {
-      expect(error).toEqual({
-        code: 'UnexpectedException',
-        message: 'Unexpected exception'
-      });
+      expect(error).toBeInstanceOf(InternalServerError);
+      expect(error.message).toEqual('test error');
     }
   });
 });

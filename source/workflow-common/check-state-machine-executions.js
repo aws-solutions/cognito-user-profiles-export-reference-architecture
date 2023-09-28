@@ -6,8 +6,10 @@
  */
 
 const { getOptions } = require('../utils/metrics');
-const AWS = require('aws-sdk');
-const stepFunctions = new AWS.StepFunctions(getOptions());
+const {
+ SFN: StepFunctions
+} = require("@aws-sdk/client-sfn");
+const stepFunctions = new StepFunctions(getOptions());
 
 /**
  * Returns whether a state machine has multiple executions running
@@ -25,7 +27,7 @@ exports.handler = async (event) => {
     };
 
     console.log(`Listing state machine executions: ${JSON.stringify(listExecutionsParams)}`);
-    const response = await stepFunctions.listExecutions(listExecutionsParams).promise();
+    const response = await stepFunctions.listExecutions(listExecutionsParams);
     console.log(JSON.stringify(response));
 
     result.OnlyThisStateMachineExecution = (response.executions.length === 1 && response.executions[0].executionArn === stateMachineExecutionId);

@@ -1,22 +1,30 @@
 {
-    "name": "workflow-common",
-    "version": "1.0.2",
-    "description": "Common functionality for all Step Functions Workflows",
-  "author": {"name": "Amazon Web Services", "url": "https://aws.amazon.com/solutions"},
-    "license": "Apache-2.0",
-    "private": true,
-    "dependencies": {},
-    "devDependencies": {
-        "aws-sdk": "^2.904.0",
-        "jest": "^29.6.1"
-    },
-    "scripts": {
-        "clean": "rm -rf dist/ node_modules/ coverage/ package-lock.json",
-        "test": "jest test/*.spec.js --coverage --silent",
-        "package:zip": "cd dist && zip -rq package.zip .",
-        "package:dist": "mkdir dist && rsync -avr ../utils ./dist/ && rsync -avr --exclude=*test* --exclude=*dist* --exclude=*node_modules* ./ ./dist/$npm_package_name",
-        "package": "npm run clean && npm install --production && npm run package:dist && npm run package:zip",
-        "build": "npm run clean && rm -f package-lock.json && npm install"
-    },
-    "bundledDependencies": []
+  "name": "workflow-common",
+  "version": "1.0.2",
+  "description": "Common functionality for all Step Functions Workflows",
+  "author": {
+    "name": "Amazon Web Services",
+    "url": "https://aws.amazon.com/solutions"
+  },
+  "license": "Apache-2.0",
+  "private": true,
+  "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.398.0",
+    "@aws-sdk/client-sfn": "^3.398.0",
+    "@aws-sdk/client-sns": "^3.398.0",
+    "@aws-sdk/client-sqs": "^3.398.0",
+    "@aws-sdk/lib-dynamodb": "^3.398.0",
+    "aws-sdk-client-mock": "^3.0.0",
+    "jest": "^29.6.1"
+  },
+  "scripts": {
+    "clean": "rm -rf dist/ node_modules/ coverage/",
+    "test": "jest test/*.spec.js --coverage --silent",
+    "package:zip": "cd dist && zip -rq package.zip .",
+    "package:dist": "mkdir dist && rsync -avr ../utils ./dist/ && rsync -avr --exclude=*test* --exclude=*dist* --exclude=*node_modules* ./ ./dist/$npm_package_name",
+    "package": "npm run clean && npm install --production && npm run package:dist && npm run package:zip",
+    "build": "npm run clean && npm install"
+  },
+  "bundledDependencies": [],
+  "bundleDependencies": []
 }

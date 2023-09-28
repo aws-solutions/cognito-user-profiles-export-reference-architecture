@@ -6,22 +6,13 @@
  */
 
 // Mock AWS SDK
-const mockCognito = jest.fn();
-const mockDynamoDB = jest.fn();
-jest.mock('aws-sdk', () => {
-  return {
-    CognitoIdentityServiceProvider: jest.fn(() => ({
-      listUsers: mockCognito
-    }))
-  };
-});
-jest.mock('aws-sdk/clients/dynamodb', () => {
-  return {
-    DocumentClient: jest.fn(() => ({
-      batchWrite: mockDynamoDB
-    }))
-  };
-});
+
+const { mockClient } = require('aws-sdk-client-mock');
+const { CognitoIdentityProvider, ListUsersCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const mockCognito = mockClient(CognitoIdentityProvider);
+
+const { DynamoDBDocumentClient, BatchWriteCommand } = require("@aws-sdk/lib-dynamodb");
+const mockDynamoDB = mockClient(DynamoDBDocumentClient);
 
 // Mock Date
 const now = new Date();
@@ -61,8 +52,8 @@ beforeAll(() => {
 
 describe('export-users', function () {
   beforeEach(() => {
-    mockCognito.mockReset();
-    mockDynamoDB.mockReset();
+    mockCognito.reset();
+    mockDynamoDB.reset();
   });
 
   describe('step function first try', function () {
@@ -74,14 +65,7 @@ describe('export-users', function () {
     };
 
     it('should return empty paginationToken - cognito: no user', async () => {
-      mockCognito.mockImplementation(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve({ Users: [] });
-          }
-        };
-      });
+      mockCognito.on(ListUsersCommand).resolves({ Users: [] });
 
       const lambda = require('../export-users');
       const result = await lambda.handler(event, context);
@@ -95,22 +79,8 @@ describe('export-users', function () {
     });
 
     it('should return empty paginationToken - cognito: no more user', async () => {
-      mockCognito.mockImplementationOnce(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve(JSON.parse(JSON.stringify(mockUsers)));
-          }
-        };
-      });
-      mockDynamoDB.mockImplementation(() => {
-        return {
-          promise() {
-            // dynamodb.batchWrite
-            return Promise.resolve({ UnprocessedItems: {} });
-          }
-        };
-      });
+      mockCognito.on(ListUsersCommand).resolvesOnce(JSON.parse(JSON.stringify(mockUsers)));
+      mockDynamoDB.on(BatchWriteCommand).resolves({ UnprocessedItems: {} });
 
       const lambda = require('../export-users');
       const result = await lambda.handler(event, context);
@@ -124,37 +94,9 @@ describe('export-users', function () {
     });
 
     it('should return empty paginationToken - cognito: no more user, dynamodb: unprocessed items', async () => {
-      mockCognito.mockImplementation(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve(JSON.parse(JSON.stringify(mockUsers)));
-          }
-        };
-      });
-      mockDynamoDB
-        .mockImplementationOnce(() => {
-          return {
-            promise() {
-              // dynamodb.batchWrite
-              const unprocessedItems = {};
-              unprocessedItems[process.env.TABLE_NAME] = [{ PutRequest: {} }];
-
-              return Promise.resolve({ UnprocessedItems: unprocessedItems });
-            }
-          };
-        })
-        .mockImplementationOnce(() => {
-          return {
-            promise() {
-              // dynamodb.batchWrite
-              const unprocessedItems = {};
-              unprocessedItems[process.env.TABLE_NAME] = [{ PutRequest: {} }];
-
-              return Promise.resolve({ UnprocessedItems: { [process.env.TABLE_NAME]: [] } });
-            }
-          };
-        });
+      mockCognito.on(ListUsersCommand).resolves(JSON.parse(JSON.stringify(mockUsers)));
+      mockDynamoDB.on(BatchWriteCommand).resolvesOnce({ UnprocessedItems: {[process.env.TABLE_NAME] : [{ PutRequest: {} }]} })
+        .resolvesOnce({ UnprocessedItems: { [process.env.TABLE_NAME]: [] } });
 
 
       const lambda = require('../export-users');
@@ -169,61 +111,38 @@ describe('export-users', function () {
     });
 
     it('should return empty paginationToken - cognito: more users', async () => {
-      mockCognito.mockImplementationOnce(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve({
-              Users: [{
-                Username: 'mock-user',
-                Attributes: [
-                  {
-                    Name: 'sub',
-                    Value: 'bd830ed0-bc56-448e-9bd9-d6e597bcd20f'
-                  }
-                ],
-                UserCreateDate: 1591893018.766,
-                UserLastModifiedDate: 1592238002.126,
-                Enabled: true,
-                UserStatus: 'CONFIRMED'
-              }],
-              PaginationToken: 'nextToken'
-            });
-          }
-        };
+      mockCognito.on(ListUsersCommand).resolvesOnce({
+        Users: [{
+          Username: 'mock-user',
+          Attributes: [
+            {
+              Name: 'sub',
+              Value: 'bd830ed0-bc56-448e-9bd9-d6e597bcd20f'
+            }
+          ],
+          UserCreateDate: 1591893018.766,
+          UserLastModifiedDate: 1592238002.126,
+          Enabled: true,
+          UserStatus: 'CONFIRMED'
+        }],
+        PaginationToken: 'nextToken'
+      }).resolvesOnce({
+        Users: [{
+          Username: 'mock-user',
+          Attributes: [
+            {
+              Name: 'sub',
+              Value: 'bd830ed0-bc56-448e-9bd9-d6e597bcd20f'
+            }
+          ],
+          UserCreateDate: 1591893018.766,
+          UserLastModifiedDate: 1592238002.126,
+          Enabled: true,
+          UserStatus: 'CONFIRMED'
+        }]
       });
 
-      mockCognito.mockImplementationOnce(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve({
-              Users: [{
-                Username: 'mock-user',
-                Attributes: [
-                  {
-                    Name: 'sub',
-                    Value: 'bd830ed0-bc56-448e-9bd9-d6e597bcd20f'
-                  }
-                ],
-                UserCreateDate: 1591893018.766,
-                UserLastModifiedDate: 1592238002.126,
-                Enabled: true,
-                UserStatus: 'CONFIRMED'
-              }]
-            });
-          }
-        };
-      });
-
-      mockDynamoDB.mockImplementation(() => {
-        return {
-          promise() {
-            // dynamodb.batchWrite
-            return Promise.resolve({ UnprocessedItems: {} });
-          }
-        };
-      });
+      mockDynamoDB.on(BatchWriteCommand).resolves({ UnprocessedItems: {} });
 
       const lambda = require('../export-users');
       const result = await lambda.handler(event, context);
@@ -241,22 +160,8 @@ describe('export-users', function () {
         return 1000;
       };
 
-      mockCognito.mockImplementation(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve(JSON.parse(JSON.stringify(mockUsersWithToken)));
-          }
-        };
-      });
-      mockDynamoDB.mockImplementation(() => {
-        return {
-          promise() {
-            // dynamodb.batchWrite
-            return Promise.resolve({ UnprocessedItems: {} });
-          }
-        };
-      });
+      mockCognito.on(ListUsersCommand).resolves(JSON.parse(JSON.stringify(mockUsersWithToken)));
+      mockDynamoDB.on(BatchWriteCommand).resolves({ UnprocessedItems: {} });
 
       const lambda = require('../export-users');
       const result = await lambda.handler(event, context);
@@ -282,22 +187,8 @@ describe('export-users', function () {
     };
 
     it('should return empty paginationToken - cognito: no more user', async () => {
-      mockCognito.mockImplementationOnce(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve(JSON.parse(JSON.stringify(mockUsers)));
-          }
-        };
-      });
-      mockDynamoDB.mockImplementation(() => {
-        return {
-          promise() {
-            // dynamodb.batchWrite
-            return Promise.resolve({ UnprocessedItems: {} });
-          }
-        };
-      });
+      mockCognito.on(ListUsersCommand).resolvesOnce(JSON.parse(JSON.stringify(mockUsers)));
+      mockDynamoDB.on(BatchWriteCommand).resolves({ UnprocessedItems: {} });
 
       const lambda = require('../export-users');
       const result = await lambda.handler(event, context);
@@ -311,61 +202,38 @@ describe('export-users', function () {
     });
 
     it('should return empty paginationToken - cognito: more users', async () => {
-      mockCognito.mockImplementationOnce(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve({
-              Users: [{
-                Username: 'mock-user',
-                Attributes: [
-                  {
-                    Name: 'sub',
-                    Value: 'bd830ed0-bc56-448e-9bd9-d6e597bcd20f'
-                  }
-                ],
-                UserCreateDate: 1591893018.766,
-                UserLastModifiedDate: 1592238002.126,
-                Enabled: true,
-                UserStatus: 'CONFIRMED'
-              }],
-              PaginationToken: 'nextToken'
-            });
-          }
-        };
+      mockCognito.on(ListUsersCommand).resolvesOnce({
+        Users: [{
+          Username: 'mock-user',
+          Attributes: [
+            {
+              Name: 'sub',
+              Value: 'bd830ed0-bc56-448e-9bd9-d6e597bcd20f'
+            }
+          ],
+          UserCreateDate: 1591893018.766,
+          UserLastModifiedDate: 1592238002.126,
+          Enabled: true,
+          UserStatus: 'CONFIRMED'
+        }],
+        PaginationToken: 'nextToken'
+      }).resolvesOnce({
+        Users: [{
+          Username: 'mock-user',
+          Attributes: [
+            {
+              Name: 'sub',
+              Value: 'bd830ed0-bc56-448e-9bd9-d6e597bcd20f'
+            }
+          ],
+          UserCreateDate: 1591893018.766,
+          UserLastModifiedDate: 1592238002.126,
+          Enabled: true,
+          UserStatus: 'CONFIRMED'
+        }]
       });
 
-      mockCognito.mockImplementationOnce(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve({
-              Users: [{
-                Username: 'mock-user',
-                Attributes: [
-                  {
-                    Name: 'sub',
-                    Value: 'bd830ed0-bc56-448e-9bd9-d6e597bcd20f'
-                  }
-                ],
-                UserCreateDate: 1591893018.766,
-                UserLastModifiedDate: 1592238002.126,
-                Enabled: true,
-                UserStatus: 'CONFIRMED'
-              }]
-            });
-          }
-        };
-      });
-
-      mockDynamoDB.mockImplementation(() => {
-        return {
-          promise() {
-            // dynamodb.batchWrite
-            return Promise.resolve({ UnprocessedItems: {} });
-          }
-        };
-      });
+      mockDynamoDB.on(BatchWriteCommand).resolves({ UnprocessedItems: {} });
 
       const lambda = require('../export-users');
       const result = await lambda.handler(event, context);
@@ -383,22 +251,8 @@ describe('export-users', function () {
         return 1000;
       };
 
-      mockCognito.mockImplementation(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve(JSON.parse(JSON.stringify(mockUsersWithToken)));
-          }
-        };
-      });
-      mockDynamoDB.mockImplementation(() => {
-        return {
-          promise() {
-            // dynamodb.batchWrite
-            return Promise.resolve({ UnprocessedItems: {} });
-          }
-        };
-      });
+      mockCognito.on(ListUsersCommand).resolves(JSON.parse(JSON.stringify(mockUsersWithToken)));
+      mockDynamoDB.on(BatchWriteCommand).resolves({ UnprocessedItems: {} });
 
       const lambda = require('../export-users');
       const result = await lambda.handler(event, context);
@@ -413,63 +267,113 @@ describe('export-users', function () {
   });
 
   describe('error', function () {
-    const event = {};
-    const context = {
-      getRemainingTimeInMillis: function () {
-        return 100000;
-      }
-    };
+    
 
     it('should throw an error - cognito-idp:listUsers failure', async () => {
-      mockCognito.mockImplementation(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.reject({
-              message: 'ERROR - listUsers'
-            });
-          }
-        };
-      });
-
-      const lambda = require('../export-users');
-      try {
-        await lambda.handler(event, context);
-      } catch (error) {
-        expect(error).toEqual({
+      mockCognito.on(ListUsersCommand).rejects({
           message: 'ERROR - listUsers'
         });
-      }
+      
+
+      const event = { 
+        paginationToken: 'string',
+        ExportTimestamp: 123456, 
+      };
+      const context = {
+        getRemainingTimeInMillis: function () {
+          return 100000;
+        }
+      };
+      const lambda = require('../export-users');
+      await expect(async () => {
+            await lambda.handler(event, context);
+        }).rejects.toThrow('ERROR - listUsers');
     });
+
 
     it('should throw an error - dynamodb:batchWrite failure', async () => {
-      mockCognito.mockImplementation(() => {
-        return {
-          promise() {
-            // cognitoIdentityServiceProvider.listUsers
-            return Promise.resolve(JSON.parse(JSON.stringify(mockUsers)));
-          }
-        };
-      });
-      mockDynamoDB.mockImplementation(() => {
-        return {
-          promise() {
-            // dynamodb.batchWrite
-            return Promise.reject({
-              message: 'ERROR - batchWrite'
-            });
-          }
-        };
+      mockCognito.on(ListUsersCommand).resolves(JSON.parse(JSON.stringify(mockUsers)));
+      mockDynamoDB.on(BatchWriteCommand).rejects({
+        message: 'ERROR - batchWrite'
       });
 
+      const event = { 
+        paginationToken: 'string',
+        ExportTimestamp: 123456, 
+      };
+      const context = {
+        getRemainingTimeInMillis: function () {
+          return 100000;
+        }
+      };
+
       const lambda = require('../export-users');
-      try {
-        await lambda.handler(event, context);
-      } catch (error) {
-        expect(error).toEqual({
-          message: 'ERROR - batchWrite'
-        });
-      }
+      await expect(async () => {
+            await lambda.handler(event, context);
+        }).rejects.toThrow('ERROR - batchWrite');
     });
+
+    it('should throw an error - event does not include valid UsernameAttributes', async () => {
+    
+      mockCognito.on(ListUsersCommand).resolvesOnce({
+        Users: [{
+          Username: 'mock-user',
+          Attributes: [
+            {
+              Name: 'sub',
+              Value: 'bd830ed0-bc56-448e-9bd9-d6e597bcd20f'
+            }
+          ],
+          UserCreateDate: 1591893018.766,
+          UserLastModifiedDate: 1592238002.126,
+          Enabled: true,
+          UserStatus: 'CONFIRMED'
+        }],
+        PaginationToken: 'nextToken'
+      });
+      const event = { 
+        UsernameAttributes: '{"string":true, "string":42}',
+        paginationToken: 'string',
+        ExportTimestamp: 123456, 
+      };
+      const context = {
+        getRemainingTimeInMillis: function () {
+          return 100000;
+        }
+      };
+      const lambda = require('../export-users');
+      await expect(async () => {
+            await lambda.handler(event, context);
+        }).rejects.toThrow('poolUsernameAttributes.includes is not a function');
+    });
+
   });
+
+
+describe('import-new-users: Errors', function () {
+    beforeEach(() => {
+        jest.resetModules();
+        process.env = Object.assign(process.env, { COGNITO_TPS: 'invalid' });
+    });
+
+    afterEach(() => {
+        jest.resetModules();
+        process.env = Object.assign(process.env, { COGNITO_TPS: '10' });
+    });
+
+    it('Throws an error if an invalid CognitoTPS value is set', async function () {
+        const event = {
+            Context: {
+                Execution: { Input: { NewUserPoolId: 'user-pool-id' } },
+                State: { Name: 'UpdateNewUsers' }
+            },
+            Input: { LastEvaluatedKey: 'last-key' }
+        };
+        const lambda = require('../export-users');
+        await expect(async () => {
+            await lambda.handler(event);
+        }).rejects.toThrow('Unable to parse a number from the COGNITO_TPS value (invalid)');
+    });
+
+});
 });

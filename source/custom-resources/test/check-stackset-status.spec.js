@@ -17,39 +17,19 @@ const context = {
 const axios = require('axios');
 const MockAdapter = require('axios-mock-adapter');
 let axiosMock = new MockAdapter(axios);
+const { mockClient } = require('aws-sdk-client-mock');
+const {
+    CloudFormationClient, ListStackSetOperationResultsCommand, DeleteStackSetCommand
+} = require("@aws-sdk/client-cloudformation");
 
-// Mock AWS SDK
-const mockSSM = {
-    getParameter: jest.fn()
-};
+const mockCfn = mockClient(CloudFormationClient);
 
-const mockCfn = {
-    listStackSetOperationResults: jest.fn(),
-    deleteStackSet: jest.fn()
-};
-
-jest.mock('aws-sdk', () => {
-    return {
-        SSM: jest.fn(() => ({
-            getParameter: mockSSM.getParameter
-        })),
-        CloudFormation: jest.fn(() => ({
-            listStackSetOperationResults: mockCfn.listStackSetOperationResults,
-            deleteStackSet: mockCfn.deleteStackSet
-        }))
-    };
-});
 
 describe('check-stackset-status', function () {
     beforeEach(() => {
         process.env.AWS_REGION = 'us-east-1';
         process.env.STATE_MACHINE_ARN = 'state-machine-arn';
-        for (const mockFn in mockSSM) {
-            mockSSM[mockFn].mockReset();
-        }
-        for (const mockFn in mockCfn) {
-            mockCfn[mockFn].mockReset();
-        }
+        mockCfn.reset();
         axiosMock = new MockAdapter(axios);
     });
 
@@ -76,18 +56,11 @@ describe('check-stackset-status', function () {
             }
         };
 
-        mockCfn.listStackSetOperationResults.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Summaries:[{
-                            Status: 'FAILED'
-                        }]
-                    });
-                }
-            };
+        mockCfn.on(ListStackSetOperationResultsCommand).resolvesOnce({
+            Summaries:[{
+                Status: 'FAILED'
+            }]
         });
-
 
         const lambda = require('../check-stackset-status');
         await lambda.handler(event, context);
@@ -121,18 +94,11 @@ describe('check-stackset-status', function () {
             }
         };
 
-        mockCfn.listStackSetOperationResults.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Summaries:[{
-                            Status: 'CANCELLED'
-                        }]
-                    });
-                }
-            };
+        mockCfn.on(ListStackSetOperationResultsCommand).resolvesOnce({
+            Summaries:[{
+                Status: 'CANCELLED'
+            }]
         });
-
 
         const lambda = require('../check-stackset-status');
         await lambda.handler(event, context);
@@ -166,16 +132,10 @@ describe('check-stackset-status', function () {
             }
         };
 
-        mockCfn.listStackSetOperationResults.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Summaries:[{
-                            Status: 'PENDING'
-                        }]
-                    });
-                }
-            };
+        mockCfn.on(ListStackSetOperationResultsCommand).resolvesOnce({
+            Summaries:[{
+                Status: 'PENDING'
+            }]
         });
 
 
@@ -202,18 +162,11 @@ describe('check-stackset-status', function () {
             }
         };
 
-        mockCfn.listStackSetOperationResults.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Summaries:[{
-                            Status: 'SUCCEEDED'
-                        }]
-                    });
-                }
-            };
+        mockCfn.on(ListStackSetOperationResultsCommand).resolvesOnce({
+            Summaries:[{
+                Status: 'SUCCEEDED'
+            }]
         });
-
 
         const lambda = require('../check-stackset-status');
         await lambda.handler(event, context);
@@ -247,25 +200,13 @@ describe('check-stackset-status', function () {
             }
         };
 
-        mockCfn.listStackSetOperationResults.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({
-                        Summaries:[{
-                            Status: 'SUCCEEDED'
-                        }]
-                    });
-                }
-            };
+        mockCfn.on(ListStackSetOperationResultsCommand).resolvesOnce({
+            Summaries:[{
+                Status: 'SUCCEEDED'
+            }]
         });
 
-        mockCfn.deleteStackSet.mockImplementationOnce(() => {
-            return {
-                promise() {
-                    return Promise.resolve({});
-                }
-            };
-        });
+        mockCfn.on(DeleteStackSetCommand).resolvesOnce({});
 
         const lambda = require('../check-stackset-status');
         await lambda.handler(event, context);
