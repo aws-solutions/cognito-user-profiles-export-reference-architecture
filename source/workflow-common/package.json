@@ -1,6 +1,6 @@
 {
   "name": "workflow-common",
-  "version": "1.0.2",
+  "version": "1.0.7",
   "description": "Common functionality for all Step Functions Workflows",
   "author": {
     "name": "Amazon Web Services",
@@ -24,6 +24,9 @@
     "package:dist": "mkdir dist && rsync -avr ../utils ./dist/ && rsync -avr --exclude=*test* --exclude=*dist* --exclude=*node_modules* ./ ./dist/$npm_package_name",
     "package": "npm run clean && npm install --production && npm run package:dist && npm run package:zip",
     "build": "npm run clean && npm install"
+  },
+  "overrides": {
+    "fast-xml-parser": ">=4.4.1"
   },
   "bundledDependencies": [],
   "bundleDependencies": []
