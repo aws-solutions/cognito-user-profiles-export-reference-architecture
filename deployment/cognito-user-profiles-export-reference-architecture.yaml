@@ -115,7 +115,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/global-table-creator.handler"
       Role: !GetAtt GlobalTableCreatorRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 120
       MemorySize: 128
       Environment:
@@ -216,7 +216,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/global-table-checker.handler"
       Role: !GetAtt GlobalTableCheckerRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 300
       MemorySize: 128
       Environment:
@@ -372,7 +372,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/stack-checker.handler"
       Role: !GetAtt StackCheckerCustomResourceLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 120
       MemorySize: 128
       Environment:
@@ -468,7 +468,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/solution-constants.handler"
       Role: !GetAtt SolutionConstantsCustomResourceLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -532,7 +532,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/stackset-manager.handler"
       Role: !GetAtt StackSetManagerCustomResourceLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 300
       MemorySize: 128
       Environment:
@@ -831,7 +831,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/check-stackset-status.handler"
       Role: !GetAtt StackSetCheckStatusLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 300
       MemorySize: 128
       Environment:

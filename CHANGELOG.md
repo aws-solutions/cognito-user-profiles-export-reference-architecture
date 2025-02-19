@@ -5,13 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2025-02-20
+
+### Changed
+
+- Upgraded lambda runtimes to NodeJS 20
+
 ## [1.0.8] - 2024-11-27
 
 ### Changed
 
 - Updated dependencies to address cross-spawn CVE-2024-21538
 
-## [1.0.7] - 2024-08
+## [1.0.7] - 2024-08-19
 
 - Upgrade `axios` to mitigate [CVE-2024-39338](https://nvd.nist.gov/vuln/detail/CVE-2024-39338)
 
