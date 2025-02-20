@@ -107,7 +107,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "custom-resources.zip"]]
       Handler: "custom-resources/stackset-constants.handler"
       Role: !GetAtt StackSetConstantsCustomResourceLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -707,7 +707,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-common.zip"]]
       Handler: "workflow-common/check-workflow-queues.handler"
       Role: !GetAtt CheckWorkflowQueuesLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -776,7 +776,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/check-new-user-pool.handler"
       Role: !GetAtt ImportCheckNewUserPoolLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -843,7 +843,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/scan-table.handler"
       Role: !GetAtt ImportScanTableLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 300
       MemorySize: 128
       Environment:
@@ -964,7 +964,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/import-users.handler"
       Role: !GetAtt ImportNewUsersLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 900
       MemorySize: 1024  # Higher memory size to allow for large CSV files to be uploaded to the Cognito User Import Job
       Environment:
@@ -1077,7 +1077,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/import-users.handler"
       Role: !GetAtt ImportCheckImportJobLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 60
       MemorySize: 128
       Environment:
@@ -1164,7 +1164,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-import.zip"]]
       Handler: "workflow-import/update-new-users.handler"
       Role: !GetAtt ImportUpdateNewUsersLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 900
       MemorySize: 128
       Environment:
@@ -1274,7 +1274,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-common.zip"]]
-      Runtime:  nodejs18.x
+      Runtime:  nodejs20.x
       Timeout: 300
       Environment:
         Variables:
@@ -1480,7 +1480,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-common.zip"]]
-      Runtime:  nodejs18.x
+      Runtime:  nodejs20.x
       Timeout: 300
       Environment:
         Variables:
@@ -2005,7 +2005,7 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"], "workflow-export.zip"]]
       Handler: "workflow-export/export-users.handler"
       Role: !GetAtt ExportUsersLambdaRole.Arn
-      Runtime: nodejs18.x
+      Runtime: nodejs20.x
       Timeout: 900
       MemorySize: 128
       Environment:
@@ -2083,7 +2083,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs18.x
+      Runtime:  nodejs20.x
       Timeout: 300
       Environment:
         Variables:
@@ -2146,7 +2146,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs18.x
+      Runtime:  nodejs20.x
       Timeout: 300
       Environment:
         Variables:
@@ -2210,7 +2210,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs18.x
+      Runtime:  nodejs20.x
       Timeout: 300
       Environment:
         Variables:
@@ -2279,7 +2279,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs18.x
+      Runtime:  nodejs20.x
       Timeout: 300
       Environment:
         Variables:
@@ -2371,7 +2371,7 @@ Resources:
       Code:
         S3Bucket: !Join ["-", [!FindInMap ["Solution", "Config", "S3BucketPrefix"], Ref: "AWS::Region"]]
         S3Key: !Join ["/", [!FindInMap ["Solution", "Config", "S3KeyPrefix"],  "workflow-export.zip"]]
-      Runtime:  nodejs18.x
+      Runtime:  nodejs20.x
       Timeout: 300
       Environment:
         Variables:
