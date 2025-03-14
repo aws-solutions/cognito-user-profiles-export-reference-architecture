@@ -1,6 +1,6 @@
 {
   "name": "workflow-import",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Populates a new user pool with user profiles, groups and group memberships from the backup table",
   "scripts": {
     "clean": "rm -rf dist/ node_modules/ coverage/",
@@ -27,7 +27,7 @@
     "jest": "^29.7.0"
   },
   "dependencies": {
-    "axios": "^1.7.4",
+    "axios": "^1.8.2",
     "uuid": "^8.3.0"
   },
   "overrides": {

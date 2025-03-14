@@ -1,6 +1,6 @@
 {
   "name": "utils",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Custom Resource Helper functions",
   "scripts": {
     "clean": "rm -rf dist/ node_modules/ coverage/",
@@ -12,7 +12,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "axios": "^1.4.0",
+    "axios": "^1.8.2",
     "moment": "^2.27.0"
   },
   "devDependencies": {
