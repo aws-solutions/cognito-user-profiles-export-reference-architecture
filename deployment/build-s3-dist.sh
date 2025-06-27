@@ -32,14 +32,14 @@ source_dir="$template_dir/../source"
 echo "------------------------------------------------------------------------------"
 echo "[Init] Clean old dist, node_modules and bower_components folders"
 echo "------------------------------------------------------------------------------"
-echo "rm -rf $template_dist_dir"
-rm -rf $template_dist_dir
-echo "mkdir -p $template_dist_dir"
-mkdir -p $template_dist_dir
-echo "rm -rf $build_dist_dir"
-rm -rf $build_dist_dir
-echo "mkdir -p $build_dist_dir"
-mkdir -p $build_dist_dir
+echo "rm -rf \"$template_dist_dir\""
+rm -rf "$template_dist_dir"
+echo "mkdir -p \"$template_dist_dir\""
+mkdir -p "$template_dist_dir"
+echo "rm -rf \"$build_dist_dir\""
+rm -rf "$build_dist_dir"
+echo "mkdir -p \"$build_dist_dir\""
+mkdir -p "$build_dist_dir"
 
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Templates"
@@ -48,18 +48,18 @@ SUB_BUCKET_NAME="s/BUCKET_NAME_PLACEHOLDER/$1/g"
 SUB_SOLUTION_NAME="s/SOLUTION_NAME_PLACEHOLDER/$2/g"
 SUB_VERSION="s/VERSION_PLACEHOLDER/$3/g"
 
-for FULLNAME in ./*.yaml
+for FULLNAME in "$template_dir"/*.yaml
 do
-  TEMPLATE=`basename $FULLNAME .yaml`
+  TEMPLATE=`basename "$FULLNAME" .yaml`
   echo "Template: $TEMPLATE"
-  sed -e $SUB_BUCKET_NAME -e $SUB_SOLUTION_NAME -e $SUB_VERSION $template_dir/$TEMPLATE.yaml > $template_dist_dir/$TEMPLATE.template
-  cp $template_dist_dir/$TEMPLATE.template $build_dist_dir/
+  sed -e "$SUB_BUCKET_NAME" -e "$SUB_SOLUTION_NAME" -e "$SUB_VERSION" "$template_dir/$TEMPLATE.yaml" > "$template_dist_dir/$TEMPLATE.template"
+  cp "$template_dist_dir/$TEMPLATE.template" "$build_dist_dir/"
 done
 
 echo "------------------------------------------------------------------------------"
 echo "[Building] Utils"
 echo "------------------------------------------------------------------------------"
-cd $source_dir/utils
+cd "$source_dir/utils"
 npm run clean
 npm install --production
 
@@ -75,7 +75,7 @@ do
   echo "------------------------------------------------------------------------------"
   echo "[Building] Lambda package: $lambda_package"
   echo "------------------------------------------------------------------------------"
-  cd $source_dir/$lambda_package
+  cd "$source_dir/$lambda_package"
   npm run package
 
   # Check the result of the build and exit if a failure is identified
@@ -88,6 +88,6 @@ do
     echo "------------------------------------------------------------------------------"
     exit 1
   fi
-  mv ./dist/package.zip $build_dist_dir/$lambda_package.zip
+  mv ./dist/package.zip "$build_dist_dir/$lambda_package.zip"
   npm run clean
 done
